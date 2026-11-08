@@ -87,6 +87,7 @@
     let cfg = { email_login: false };
     try { cfg = await api('/v1/auth/config'); } catch { /* old server: pairing code only */ }
     $('emailCard').hidden = !cfg.email_login; $('codeCard').hidden = cfg.email_login;
+    $('noEmail').hidden = !!cfg.email_login;
     const fromLink = async () => {                                  // the link in the email: the code rides in the #fragment
       const m = /[#&]code=([A-Za-z0-9-]+)/.exec(location.hash);
       if (m && !S.token) { show('pair'); await verifyCode(m[1]); }

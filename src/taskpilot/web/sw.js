@@ -1,6 +1,6 @@
 /* Deskhand service worker: makes the app installable and its shell load instantly/offline.
    It NEVER caches the API: tasks, tokens and results always come live from the server. */
-const VERSION = 'deskhand-shell-v6';
+const VERSION = 'deskhand-shell-v7';
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'style.css', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png'];
 
