@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 
 import pytest
@@ -353,3 +354,11 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if item.name in WINDOWS_ONLY:
             item.add_marker(skip)
+
+
+def pytest_runtest_logreport(report):
+    """In GitHub Actions, announce each failure as an annotation (readable without log access)."""
+    if os.environ.get("GITHUB_ACTIONS") and report.failed:
+        last = [ln for ln in report.longreprtext.strip().splitlines() if ln.strip()][-1:] or [""]
+        sys.__stdout__.write(f"::error title={report.nodeid}::{last[0][:300].replace(chr(10), ' ')}\n")
+        sys.__stdout__.flush()
