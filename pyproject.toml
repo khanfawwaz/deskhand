@@ -10,7 +10,7 @@ bench = ["pillow"]
 mongo = ["pymongo"]
 server = ["fastapi", "uvicorn[standard]"]
 agent = ["psutil", "mss", "pyautogui", "pillow", "uiautomation"]
-dev = ["pytest", "pytest-asyncio", "mongomock", "pymongo", "pillow"]
+dev = ["pytest", "pytest-asyncio", "mongomock", "pymongo", "pillow", "psutil"]
 
 [project.scripts]
 taskpilot = "taskpilot.cli:main"
