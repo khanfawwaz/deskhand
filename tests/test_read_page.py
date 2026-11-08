@@ -126,7 +126,8 @@ async def test_read_page_tool_returns_text_for_approved_windows_only(make_env):
     assert r.ok and "DS3225" in r.data["page_text"] and r.data["stable"] is True
     assert get_registry().get("ui.read_page").verify(None, r.data)[0]
     bad = await run(e, "ui.read_page", window="Other app")
-    assert bad.status == "error" and "not an approved" in bad.error
+    assert bad.status == "denied" and "not an approved" in bad.error          # asks the user instead of failing
+    assert bad.data["needs_access"]["kind"] == "window"
     ok, why = get_registry().get("ui.read_page").verify(None, {"page_text": "x", "chars": 1, "stable": False})
     assert ok and "still changing" in why
 

@@ -41,6 +41,7 @@ class Loopback(DeviceConnection):
     async def query(self, action_id, timeout=5.0): return self.ex.lookup(action_id)
     async def cancel(self, task_id): self.ex.cancel_task(task_id)
     async def estop(self): self.ex.estop()
+    async def end_task(self, task_id): self.ex.end_task(task_id)
 
 
 def classify_failure(status: str, error: str, actions: list[dict]) -> str:

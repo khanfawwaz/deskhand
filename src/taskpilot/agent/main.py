@@ -84,6 +84,8 @@ async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbe
                                               "result": r.model_dump(mode="json") if r else None}))
                 elif kind == "cancel":
                     ex.cancel_task(msg["task_id"])
+                elif kind == "task_end":
+                    ex.end_task(msg["task_id"])
                 elif kind == "estop":
                     ex.estop()
                 elif kind == "revoked":
@@ -144,6 +146,27 @@ async def run_agent(cfg: dict, token: str, ex: Executor) -> int:
     return 0
 
 
+def save_grant(config_path: str, kind: str, key: str, value: str | None) -> None:
+    """Remember an access the user chose to 'always allow' by adding it to this computer's settings file."""
+    with open(config_path, encoding="utf-8-sig") as f:
+        cfg = json.load(f)
+    pol = cfg.setdefault("policy", {})
+    if kind == "site":
+        pol.setdefault("ui_allowed_hosts", [])
+        if key not in pol["ui_allowed_hosts"]:
+            pol["ui_allowed_hosts"].append(key)
+    elif kind == "app":
+        pol.setdefault("approved_apps", {})[key] = value or key
+    else:
+        pol.setdefault("ui_extra_processes", [])
+        if key not in pol["ui_extra_processes"]:
+            pol["ui_extra_processes"].append(key)
+    tmp = config_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:                    # no BOM; written whole, then swapped in
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, config_path)
+
+
 def _read_token(path: str | None) -> str:
     if not path or not os.path.isfile(path):
         return ""
@@ -186,6 +209,7 @@ def main() -> None:
         _lower_priority()
     from .backend import WindowsBackend
     ex = Executor(WindowsBackend(), Policy.from_dict(cfg.get("policy", {})))
+    ex.persist = lambda kind, key, value: save_grant(args.config, kind, key, value)
     sys.exit(asyncio.run(run_agent(cfg, token, ex)))
 
 

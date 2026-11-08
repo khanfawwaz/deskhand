@@ -58,7 +58,11 @@ async def test_unapproved_and_protected_windows_are_refused(make_env):
         for r in (await run(e, "ui.snapshot", window=w),
                   await run(e, "ui.click", window=w, name="OK"),
                   await run(e, "ui.type", window=w, name="OK", text="rm -rf")):
-            assert r.status == "error" and ("not an approved" in r.error or "protected" in r.error), (w, r.error)
+            if w == "Command Prompt":                     # protected: refused for good, never offered for approval
+                assert r.status == "error" and "protected" in r.error and "needs_access" not in r.data, (w, r.error)
+            else:                                         # merely not approved yet: a request the user can answer
+                assert r.status == "denied" and "not an approved" in r.error, (w, r.error)
+                assert r.data["needs_access"]["kind"] == "window" and r.data["needs_access"]["process"] == "other.exe"
     assert e.backend.calls == []                              # nothing was ever clicked or typed
     assert "no visible window" in (await run(e, "ui.snapshot", window="Nonexistent")).error
 

@@ -10,7 +10,7 @@ import asyncio
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..policy import Decision, Policy
-from .registry import Tool, ToolContext, ToolRegistry
+from .registry import Tool, ToolContext, ToolRegistry, NeedsAccess
 
 
 class _P(BaseModel):
@@ -82,7 +82,11 @@ async def _window(ctx: ToolContext, title: str) -> tuple[dict | None, str | None
     from ..agent.gate import window_allowed
     d = await window_allowed(ctx.policy, ctx.backend, win["title"], win["process"])
     if not d.allowed:
-        return None, d.reason
+        reason = (f"a window matching '{title}' is not approved" if ctx.policy.cloud_safe else d.reason)   # no private titles
+        if d.access:
+            from ..agent.gate import window_access
+            raise NeedsAccess(reason, await window_access(ctx.policy, ctx.backend, win["title"], win["process"], d))
+        return None, (f"a window matching '{title}' is protected" if ctx.policy.cloud_safe else d.reason)
     return win, None
 
 

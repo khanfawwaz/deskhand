@@ -21,6 +21,7 @@ class ModelContext:
     notes: list[str] = field(default_factory=list)   # orchestrator feedback (rejections etc.)
     vision: bool = True                              # may the model ever be shown a screenshot?
     playbook: str = ""                               # trusted tips for the apps named in the goal
+    screen_text: str = ""                            # the screen as TEXT, written by a vision model for a text-only decider
 
 
 class ModelRuntime(ABC):
@@ -34,8 +35,11 @@ def render_user_message(ctx: ModelContext) -> str:
         "goal": ctx.goal, "task_state": ctx.state,
         "screenshot": ({"attached": True, "size": ctx.screenshot_size, "active_window": ctx.active_window}
                        if ctx.screenshot_b64 else
+                       {"attached": False, "described_below": True, "size": ctx.screenshot_size,
+                        "active_window": ctx.active_window} if ctx.screen_text else
                        {"attached": False, **({"hint": "call capture_screen to see the screen"}
                                               if ctx.vision else {})}),
+        **({"screen_description": ctx.screen_text} if ctx.screen_text else {}),
         "approved_app_ids": ctx.approved_apps,
         "recent_history": ctx.history[-12:],
         "orchestrator_notes": ctx.notes[-5:],

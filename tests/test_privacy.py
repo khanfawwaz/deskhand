@@ -66,7 +66,9 @@ async def test_window_list_and_focus_are_filtered_in_privacy_mode(make_env):
     assert [w["title"] for w in safe.data["windows"]] == ["Untitled - Notepad"]
     assert "Gmail" not in str(safe.data) and "Mum" not in str(safe.data)
     f = await e.executor.handle(req(call("windows.focus", title="Gmail")))
-    assert f.status == "error" and "no approved window" in f.error
+    assert f.status == "denied" and f.data["needs_access"]["kind"] in ("site", "window")     # never focused: it ASKS
+    assert "me@example.com" not in f.error and "Inbox" not in f.error          # the private title is never echoed
+    assert not any(c[0] == "focus" and "Gmail" in c[1] for c in e.backend.calls)
     assert (await e.executor.handle(req(call("windows.focus", title="Notepad")))).ok
 
 
@@ -248,7 +250,9 @@ async def test_other_sites_in_the_same_browser_stay_refused_hidden_and_unfocusab
     listed = await e.executor.handle(req(call("windows.list")))
     assert [w["title"] for w in listed.data["windows"]] == ["Find Cheapest Servo Motor - Google Chrome"]
     assert "Gmail" not in str(listed.data)
-    assert (await e.executor.handle(req(call("windows.focus", title="Gmail")))).status == "error"
+    refused = await e.executor.handle(req(call("windows.focus", title="Gmail")))
+    assert refused.status == "denied" and refused.data["needs_access"]["target"] == "mail.google.com"   # exact host, never "google.com"
+    assert not any(c[0] == "focus" and "Gmail" in c[1] for c in e.backend.calls)
     # the capture refuses the Gmail window and brings the chat forward instead of ever reading Gmail
     r = await e.executor.handle(req(CaptureScreen()))
     assert r.ok and e.backend.active == "Find Cheapest Servo Motor - Google Chrome"

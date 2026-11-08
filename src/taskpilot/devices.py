@@ -32,6 +32,9 @@ class DeviceConnection(ABC):
     @abstractmethod
     async def estop(self) -> None: ...
 
+    async def end_task(self, task_id: str) -> None:
+        """A task finished: the helper takes back 'just this time' access it was given. Optional (default: nothing)."""
+
 
 class DeviceHub:
     def __init__(self) -> None:
@@ -121,6 +124,10 @@ class WebSocketConnection(DeviceConnection):
     async def estop(self) -> None:
         if not self.closed:
             await self._send(json.dumps({"type": "estop"}))
+
+    async def end_task(self, task_id: str) -> None:
+        if not self.closed:
+            await self._send(json.dumps({"type": "task_end", "task_id": task_id}))
 
     def on_message(self, msg: dict[str, Any]) -> None:
         key = msg.get("result", {}).get("action_id") if msg.get("type") == "result" else msg.get("qid")

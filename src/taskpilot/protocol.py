@@ -86,6 +86,15 @@ class GetProcessStatus(_Strict):
     pid: int | None = None
 
 
+class GrantAccess(_Strict):
+    """Control message sent by the SERVER only after the USER said yes in the app: let the helper use an app, a
+    website or a window. The model can never propose this (the orchestrator rejects it)."""
+    tool: Literal["grant_access"] = "grant_access"
+    kind: Literal["app", "site", "window"]
+    target: str = Field(min_length=1, max_length=120)
+    remember: bool = False                      # True = also saved on this computer for next time
+
+
 class AppToolCall(_Strict):
     """A call to a tool from the tool registry (e.g. files.write, git.status, windows.focus).
 
@@ -99,7 +108,7 @@ class AppToolCall(_Strict):
 Action = Annotated[
     Union[
         CaptureScreen, GetActiveWindow, LaunchApplication, Click, DoubleClick,
-        TypeText, PressKey, Hotkey, Scroll, Wait, RunCommand, GetProcessStatus, AppToolCall,
+        TypeText, PressKey, Hotkey, Scroll, Wait, RunCommand, GetProcessStatus, GrantAccess, AppToolCall,
     ],
     Field(discriminator="tool"),
 ]
@@ -126,6 +135,7 @@ class Outcome(_Strict):
     outcome: Literal["done", "need_confirmation", "need_more_information", "cannot_proceed"]
     message: str = Field(default="", max_length=2000)
     evidence: str = Field(default="", max_length=2000)
+    options: list[str] = Field(default_factory=list, max_length=6)   # need_more_information: answers to offer the user
 
 
 class Proposal(_Strict):

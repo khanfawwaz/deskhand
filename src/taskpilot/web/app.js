@@ -275,7 +275,33 @@
   function renderApproval() {
     const t = pendingTask();
     $('approval').hidden = !t;
-    if (t) $('approvalText').textContent = L.approvalText(t.pending_approval);
+    if (!t) { S.choiceSig = ''; return; }
+    const pa = t.pending_approval;
+    const choice = pa.kind === 'access' || pa.kind === 'question';
+    $('approvalText').textContent = L.approvalText(pa);
+    $('approvalTitle').textContent = pa.kind === 'question' ? 'Deskhand has a question' : 'Deskhand needs your OK';
+    $('approvalBtns').hidden = choice;
+    $('choices').hidden = !choice || !(pa.options || []).length;
+    $('answerForm').hidden = !(choice && pa.allow_text);
+    $('approvalHint').textContent = choice ? (pa.kind === 'access' ? 'You stay in control: Deskhand only touches what you allow.' : '') : 'Say "approve" or "deny", or tap a button.';
+    const sig = t.id + '|' + JSON.stringify(pa.options || []) + pa.question;
+    if (choice && S.choiceSig !== sig) {                       // rebuild only when the question changes (no flicker while polling)
+      S.choiceSig = sig;
+      const box = $('choices'); box.textContent = '';
+      (pa.options || []).forEach((o, i) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = o.label;
+        if (i === 0) b.className = 'primary';
+        if (o.id === 'no') b.className = 'danger';
+        b.onclick = () => answer(t.id, { choice: o.id });
+        box.appendChild(b);
+      });
+      $('answerText').value = '';
+    }
+  }
+
+  async function answer(taskId, body) {
+    try { await api('/v1/tasks/' + taskId + '/answer', { method: 'POST', body }); }
+    catch (e) { $('voiceLine').textContent = e.message; }
   }
 
   // ------------------------------------------------------------------ actions
@@ -451,6 +477,11 @@
     $('goal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run($('goal').value); } });
     $('goal').addEventListener('input', cancelCountdown);
     $('micBtn').addEventListener('click', toggleMic);
+    $('answerForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = pendingTask(), v = $('answerText').value.trim();
+      if (t && v) answer(t.id, { text: v });
+    });
     $('approveBtn').onclick = () => decide(true);
     $('denyBtn').onclick = () => decide(false);
     $('stopBtn').onclick = cancelCurrent;

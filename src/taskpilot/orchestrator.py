@@ -22,7 +22,7 @@ from .recipes import (
 )
 from .protocol import (
     COORD_TOOLS, GUI_TOOLS, NON_IDEMPOTENT, OBSERVATION_TOOLS, Action, ActionRequest, ActionResult,
-    AppToolCall, CaptureScreen, GetProcessStatus, Proposal, Screenshot, action_label,
+    AppToolCall, CaptureScreen, GetProcessStatus, GrantAccess, Proposal, Screenshot, action_label,
 )
 from .states import TERMINAL, TaskState
 from .store import Store
@@ -57,6 +57,8 @@ class Config:
     ground_evidence_min: float = 0.4   # share of a "done" claim's distinctive terms that must appear in what was observed
     ground_message_min: float = 0.35   # same, for the answer in the final message of read-the-result tasks
     learn: bool = True               # keep a non-sensitive summary of verified successes as hints for similar goals
+    question_timeout_s: float = 900  # how long to wait for the user to answer a question or an access request
+    max_questions: int = 5           # questions the model may ask the user in one task
 
 
 class _Stop(Exception):
@@ -119,6 +121,20 @@ class Orchestrator:
         fut.set_result(approved)
         return True
 
+    def answer(self, tid: str, choice: str | None = None, text: str | None = None) -> bool:
+        """The user's reply to a question or an access request (a choice id and/or free text)."""
+        fut = self._confirm.get(tid)
+        if fut is None or fut.done():
+            return False
+        info = self._pending_action.get(tid) or {}
+        valid = {o["id"] for o in info.get("options", [])}
+        if choice is not None and valid and choice not in valid:
+            return False
+        if choice is None and not (text and text.strip()):
+            return False
+        fut.set_result({"choice": choice, "text": (text or "").strip()[:1000]})
+        return True
+
     def pending_approval(self, tid: str) -> dict | None:
         return self._pending_action.get(tid)
 
@@ -157,6 +173,11 @@ class Orchestrator:
             self.store.transition(tid, TaskState.FAILED, "internal error", error=f"internal error: {e!r}")
         finally:
             self.store.add_metric(tid, "task_total", (time.monotonic() - t0) * 1000)
+            if conn := self.hub.get(task["device_id"]):
+                try:
+                    await asyncio.wait_for(conn.end_task(tid), 3)      # 'just this time' access ends with the task
+                except Exception:
+                    pass
 
     def _check(self, tid: str, deadline: float) -> None:
         if self._cancel[tid].is_set():
@@ -190,6 +211,8 @@ class Orchestrator:
         attempts: dict[str, list[bool]] = {}       # exact action -> outcomes, to stop repeating what does not work
         exp_hints = self._experience_hints(task["goal"], task.get("workspace"))
         skipped = 0
+        questions = 0
+        access_state: dict[tuple, str] = {}        # (kind, target) -> "granted" | "no": never ask twice in one task
 
         while True:
             self._check(tid, deadline)
@@ -272,10 +295,35 @@ class Orchestrator:
                                     "confirmation declined or timed out")
                     notes.append("user approved: " + o.message[:200])
                     continue
+                if o.outcome == "need_more_information":
+                    questions += 1
+                    if questions > self.cfg.max_questions:
+                        raise _Stop(TaskState.FAILED, f"asked too many questions: {o.message}")
+                    reply = await self._wait_choice(tid, {
+                        "kind": "question", "tool": "question", "question": o.message or "What should I do?",
+                        "options": [{"id": x[:60], "label": x[:60]} for x in o.options if x.strip()], "allow_text": True,
+                    }, deadline)
+                    if reply is None:
+                        raise _Stop(TaskState.CANCELLED if self._cancel[tid].is_set() else TaskState.FAILED,
+                                    f"no answer received to: {o.message}")
+                    said = reply.get("text") or reply.get("choice") or ""
+                    self.store.record_action(uuid.uuid4().hex[:12], tid, history[-1]["seq"] + 1 if history else 1,
+                                             "question", {"question": o.message[:300]}, "succeeded", "answered")
+                    notes.append(f"The user answered your question ({o.message[:120]!r}): {said!r}. Carry on with that.")
+                    continue
                 raise _Stop(TaskState.FAILED, f"{o.outcome}: {o.message}")
 
             action = proposal.action
             assert action is not None
+            if action.tool == "grant_access":           # only the server grants access, after the user said yes
+                invalid += 1
+                notes.append("rejected: you cannot grant access yourself; ask the user instead")
+                self.store.record_action(uuid.uuid4().hex[:12], tid, seq + 1, "invalid", {}, "denied",
+                                         "grant_access is not available to the model", m_ms)
+                seq += 1
+                if invalid >= self.cfg.max_invalid_proposals:
+                    raise _Stop(TaskState.FAILED, "tried to grant itself access")
+                continue
             if len(history) >= task["max_actions"]:
                 raise _Stop(TaskState.FAILED, "action limit reached")
 
@@ -347,7 +395,7 @@ class Orchestrator:
 
             # ---- policy
             decision = self.policy.evaluate(action)
-            if decision.verdict == "deny":
+            if decision.verdict == "deny" and not decision.access:      # 'not approved yet' is settled on the laptop
                 invalid += 1
                 notes.append(f"policy denied {label}: {decision.reason}")
                 self.store.record_action(action_id, tid, seq, label, params, "denied", decision.reason, m_ms)
@@ -390,6 +438,15 @@ class Orchestrator:
                 await asyncio.sleep(self.cfg.settle_delay_s)
                 continue
             result, uncertain = await self._dispatch(tid, dev, action_id, action, deadline)
+            acc = (result.data or {}).get("needs_access") if result is not None else None
+            if acc and result.status in ("denied", "error"):
+                granted = await self._handle_access(tid, dev, acc, deadline, access_state, notes)
+                if isinstance(action, AppToolCall) and action.name == "ui.snapshot" and not granted:
+                    self._note_snapshot(ui_status, action, result)       # remember the window is off-limits for pixel clicks
+                self.store.update_action(action_id, status="denied", error=f"{result.error} (asked the user)")
+                history.append({"seq": seq, "tool": label, "status": "denied",
+                                "note": "needed your approval: " + ("granted, try again" if granted else "not granted")})
+                continue
             if (isinstance(action, AppToolCall) and action.name == "screen.zoom"
                     and result is not None and result.ok and result.screenshot is not None):
                 pending_shot = result.screenshot
@@ -711,6 +768,78 @@ class Orchestrator:
             if res.status == "cancelled":
                 raise _Stop(TaskState.CANCELLED, "cancelled on device")
         return None
+
+    @staticmethod
+    def _access_words(acc: dict) -> tuple[str, str]:
+        t = str(acc.get("target", ""))
+        if acc.get("kind") == "site":
+            return t, f"Deskhand wants to open {t}. Allow it?"
+        if acc.get("kind") == "app":
+            return t, f"Deskhand wants to open the app \u201c{t}\u201d. Allow it?"
+        who = acc.get("process") or t
+        return who, f"Deskhand wants to use the program {who}. Allow it?"
+
+    async def _handle_access(self, tid: str, dev: str, acc: dict, deadline: float, state: dict, notes: list[str]) -> bool:
+        """A step was blocked only because the user has not approved this yet: ask, apply the answer on the laptop."""
+        kind, target = str(acc.get("kind", "")), str(acc.get("target", ""))
+        key = (kind, target.lower())
+        what, question = self._access_words(acc)
+        if state.get(key) == "no":
+            notes.append(f"The user already declined {what}; do not ask again. Use another way, or ask the user what they prefer.")
+            return False
+        if state.get(key) == "granted":
+            notes.append(f"{what} was already approved but the step is still blocked; try a different step.")
+            return False
+        reply = await self._wait_choice(tid, {
+            "kind": "access", "tool": "access", "question": question, "access": acc,
+            "options": [{"id": "task", "label": "Allow this time"}, {"id": "always", "label": "Always allow on this computer"},
+                        {"id": "no", "label": "Not now"}],
+        }, deadline)
+        choice = (reply or {}).get("choice")
+        if self._cancel[tid].is_set():
+            raise _Stop(TaskState.CANCELLED, "cancelled by user")
+        if choice not in ("task", "always"):
+            state[key] = "no"
+            notes.append(f"The user declined access to {what}. Do not try it again: pick another way "
+                         "(another app or site), or ask the user where they would like it done.")
+            return False
+        conn = self.hub.get(dev)
+        try:
+            if conn is None:
+                raise DeviceUnavailable("offline")
+            res = await conn.execute(ActionRequest(action_id=uuid.uuid4().hex[:12], task_id=tid, action=GrantAccess(
+                kind=kind, target=target, remember=choice == "always")), self.cfg.action_timeout_s + 20)
+        except (DeviceUnavailable, ActionTimeout):
+            notes.append(f"Could not reach the computer to apply access to {what}.")
+            return False
+        if not res.ok:
+            state[key] = "no"
+            notes.append(f"Access to {what} could not be applied: {res.error}. Pick another way or ask the user.")
+            return False
+        state[key] = "granted"
+        notes.append(f"The user allowed {what}" + (" (saved for next time)" if choice == "always" else " for this task") +
+                     ". Repeat the step that was blocked.")
+        return True
+
+    async def _wait_choice(self, tid: str, info: dict, deadline: float) -> dict | None:
+        """Wait for the user's answer to a question / access request. Returns {"choice", "text"} or None."""
+        fut = asyncio.get_running_loop().create_future()
+        self._confirm[tid] = fut
+        self._pending_action[tid] = info
+        self.store.transition(tid, TaskState.WAITING_FOR_CONFIRMATION, info.get("tool", "question"))
+        try:
+            timeout = min(self.cfg.question_timeout_s, max(0.1, deadline - time.monotonic()))
+            res = await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError:
+            res = None
+        finally:
+            self._confirm.pop(tid, None)
+            self._pending_action.pop(tid, None)
+        if isinstance(res, bool):                           # approve(True/False) used on an access card
+            res = {"choice": "task", "text": ""} if res else None
+        if res is not None:
+            self.store.transition(tid, TaskState.RUNNING, "answered")
+        return res
 
     async def _wait_confirm(self, tid: str, info: dict, deadline: float) -> bool:
         fut = asyncio.get_running_loop().create_future()

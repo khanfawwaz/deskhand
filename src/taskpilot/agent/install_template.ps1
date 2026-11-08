@@ -84,12 +84,13 @@ if (-not (Test-Path $cfgPath)) {
     policy = [ordered]@{
       approved_apps = @{ notepad = "C:\Windows\System32\notepad.exe"; calc = "C:\Windows\System32\calc.exe" }
       allowed_dirs = @($docs); ui_allowed_windows = @("Calculator", "Notepad")
-      restrict_input_to_approved = $true; cloud_safe = $true
+      restrict_input_to_approved = $true; cloud_safe = $true; require_site_approval = $true
     }
   } | ConvertTo-Json -Depth 6 | ForEach-Object { [System.IO.File]::WriteAllText($cfgPath, $_, $utf8NoBom) }
 } else {
   $c = [System.IO.File]::ReadAllText($cfgPath).TrimStart([char]0xFEFF) | ConvertFrom-Json
   $c.server_url = $join.ws_url; $c.device_id = $join.device_id
+  if ($c.policy -and -not $c.policy.PSObject.Properties['require_site_approval']) { $c.policy | Add-Member -NotePropertyName require_site_approval -NotePropertyValue $true }
   [System.IO.File]::WriteAllText($cfgPath, ($c | ConvertTo-Json -Depth 8), $utf8NoBom)
 }
 

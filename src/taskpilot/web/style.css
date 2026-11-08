@@ -74,6 +74,11 @@ button.link { background: none; border: 0; color: var(--primary); padding: .2rem
   background: color-mix(in srgb, var(--warn) 18%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
   box-shadow: var(--shadow); }
 .approval .row { justify-content: flex-end; }
+.choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.choices button { flex: 1 1 auto; }
+.choices button.primary { flex-basis: 100%; }
+.answer { display: flex; gap: .5rem; }
+.answer input { flex: 1; }
 
 .chip { font-size: .8rem; font-weight: 600; padding: .25rem .65rem; border-radius: 999px; background: var(--surface-2); color: var(--busy); }
 .chip[data-tone="good"] { color: var(--good); } .chip[data-tone="bad"] { color: var(--bad); }

@@ -8,9 +8,24 @@ from __future__ import annotations
 
 import asyncio
 
-from ..policy import Decision, Policy
+from ..policy import Decision, Policy, base_domain
 
 BROWSERS = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+
+
+async def window_access(policy: Policy, backend, title: str, process: str, decision: Decision) -> dict | None:
+    """What the USER should be asked to approve for a blocked window: a website (for a browser tab) or the program."""
+    if not decision.access:
+        return None
+    if (process or "").lower() in BROWSERS:
+        try:
+            host = await asyncio.to_thread(backend.window_host, title)
+        except Exception:
+            host = None
+        if host and not policy.host_denied(host):
+            return {"kind": "site", "target": base_domain(host)}
+        return {"kind": "window", "target": title, "process": process}
+    return decision.access
 
 
 async def window_allowed(policy: Policy, backend, title: str, process: str) -> Decision:

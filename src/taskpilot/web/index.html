@@ -75,9 +75,14 @@
         <div>
           <strong id="approvalTitle">Deskhand needs your OK</strong>
           <p id="approvalText"></p>
-          <p class="hint">Say "approve" or "deny", or tap a button.</p>
+          <p class="hint" id="approvalHint">Say "approve" or "deny", or tap a button.</p>
         </div>
-        <div class="row">
+        <div id="choices" class="choices" hidden></div>
+        <form id="answerForm" class="answer" hidden autocomplete="off">
+          <input id="answerText" maxlength="500" placeholder="Or type your own answer" aria-label="Your answer">
+          <button class="primary" type="submit">Send</button>
+        </form>
+        <div class="row" id="approvalBtns">
           <button id="denyBtn" class="danger" type="button">Deny</button>
           <button id="approveBtn" class="primary" type="button">Approve</button>
         </div>

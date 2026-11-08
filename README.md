@@ -236,3 +236,44 @@ program `Deskhand.exe` with the Deskhand logo, so Task Manager shows "Deskhand",
   settings kept); the old entry stays in your app list until you remove it in Settings > Your computers.
 - Supported: 64-bit Intel/AMD Windows. The logo artwork lives in `src/taskpilot/branding.py`; `scripts/make_icons.py`
   regenerates the web icons.
+
+## Asking instead of failing: access requests and questions
+
+A computer starts with a small allow-list (Notepad, Calculator). Anything else used to end the task with "not an approved
+application". Now Deskhand **asks you**:
+
+- **Access request** (a site, an app or a program it has not been allowed to use): the app shows *"Deskhand wants to open
+  youtube.com. Allow it?"* with **Allow this time**, **Always allow on this computer** and **Not now**.
+  *This time* is taken back when the task ends; *Always* is saved in that computer's `agent.json`. Declining keeps the task
+  alive: it is told, and tries another way or asks you.
+- **Questions** (a missing detail or a choice that is yours): the model can finish a step with `need_more_information`,
+  one question and 2-4 options; the app shows buttons plus a box for your own answer, and the task **continues** with it.
+- **Fallbacks:** "play something relaxing" tries YouTube, then Spotify, then asks where you want it. Unknown names (say
+  OpenRouter) are looked up with a Google search in your own browser (you approve google.com once), then opened.
+
+What can never be approved, whatever anyone clicks: sign-in and payment pages (`deny_hosts`: Google/Microsoft sign-in,
+PayPal, Stripe, password managers...), shells, password-manager apps, UAC and Task Manager windows. The model cannot grant
+itself access: only the server sends the grant, and only after your answer.
+
+Apps are found by their Start-menu name (classic and Store apps); sites are approved by their base domain
+(`music.youtube.com` and `www.youtube.com` are both `youtube.com`). New installs set `require_site_approval` so a site is
+asked about before its page is opened.
+
+## Two models: one decides, one looks
+
+Most steps need no screenshot (controls and page text arrive as text), so the strongest **text** model can decide nearly
+everything, and a **vision** model is called only when a picture is attached.
+
+```
+TASKPILOT_TEXT_MODEL=nvidia/nemotron-3-ultra-550b-a55b       # decides every step
+TASKPILOT_VISION_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b # looks at screenshots
+TASKPILOT_SPLIT_MODE=describe                                 # or: route
+TASKPILOT_ALLOW_IMAGES=1                                      # screenshots may be sent to the hosted API
+```
+
+Put them in `/etc/deskhand.env` and `sudo systemctl restart deskhand`. In `describe` mode the vision model writes the
+screen up as exact text and the text model chooses the step; in `route` mode the vision model chooses on screenshot steps.
+If the vision model is down, the text model carries on without the picture. Without these variables a single model
+(`--model`) does both. **Images:** without `TASKPILOT_ALLOW_IMAGES=1` no screenshot ever leaves the server, so a vision
+model cannot see anything; each laptop's privacy mode still crops screenshots to approved windows.
+Compare setups with the evaluation suite: `python -m taskpilot.evals.run --suite live --text-model <id>`.

@@ -17,9 +17,11 @@ from .runner import run_spec
 from .suites import get_suite
 
 
-def _model(images: bool = True):
-    from ..hosted import OpenAICompatRuntime
+def _model(images: bool = True, text_model: str = "", mode: str = "describe"):
+    from ..hosted import OpenAICompatRuntime, make_split_runtime
     name = os.environ.get("TP_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+    if text_model:                                   # two models: a big text model decides, the vision model looks
+        return f"{text_model} + eyes {name} ({mode})", make_split_runtime(text_model, name, mode=mode, timeout=240)
     return name, OpenAICompatRuntime(name, "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY",
                                      allow_images=images, timeout=90)
 
@@ -42,6 +44,8 @@ async def amain(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="evals_out")
     ap.add_argument("--include-heavy", action="store_true")
     ap.add_argument("--no-learn", action="store_true", help="do not use or store experience memory")
+    ap.add_argument("--text-model", default="", help="two-model mode: the large text model that decides (TP_MODEL = the vision model)")
+    ap.add_argument("--split-mode", default="describe", choices=["describe", "route"])
     a = ap.parse_args(argv)
     _load_dotenv()
     if not os.environ.get("NVIDIA_API_KEY"):
@@ -54,7 +58,7 @@ async def amain(argv: list[str] | None = None) -> int:
         print("no tasks selected")
         return 2
     # the simulated desktop has no real pixels: a fake image is rejected by the vision API, so sim runs are text-only
-    model_name, model = _model(images=a.suite == "live")
+    model_name, model = _model(images=a.suite == "live", text_model=a.text_model, mode=a.split_mode)
     backend = None
     if a.suite == "live":
         from ..agent.backend import WindowsBackend

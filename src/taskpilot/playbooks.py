@@ -42,6 +42,25 @@ PLAYBOOKS: list[dict] = [
         "and returns the page text. Put the answer (the recommendation, prices, cautions) in your done message; never "
         "finish before reading it. If a login wall or human-verification check appears, "
         "stop with outcome cannot_proceed: never try to bypass it.")},
+    {"name": "Look something up", "keywords": ("openrouter", "look up", "find out", "search for", "google"), "text": (
+        "To find a website or how something works, search in the user's browser: browser.open_url "
+        "https://www.google.com/search?q=<the+words> (the user is asked to allow google.com the first time), read the "
+        "results with ui.read_page, then open the best result with browser.open_url (the user is asked about that site "
+        "too). Report what you read; never invent a link.")},
+    {"name": "Spotify", "keywords": ("spotify",), "text": (
+        "Open it with launch_application app_id spotify (the user is asked to allow it the first time; you will be told "
+        "the answer). Its window title is 'Spotify'. Use ui.snapshot to find the Search box and the Play button by "
+        "name, ui.type the artist or song, press Enter, then ui.click the first result and Play. SUCCESS: ui.read shows "
+        "a track playing or the Pause button is present. If the user declines, do not retry: ask where they want it.")},
+    {"name": "Play something", "keywords": ("relaxing", "relax", "chill", "calming", "music", "song", "songs", "playlist",
+                                            "something to listen", "play some"),
+     "unless": ("youtube", "spotify", "you tube", "apple music", "soundcloud"), "text": (
+        "The user did NOT say where to play it, so work through these IN ORDER and stop at the first that works. "
+        "(1) YouTube: browser.open_url https://www.youtube.com/results?search_query=<what+they+asked> (the user is asked to "
+        "allow YouTube first), then ui.click the first video. (2) If YouTube access is declined or fails: Spotify: "
+        "launch_application app_id spotify and play there. (3) If both are declined or neither works: finish with "
+        "outcome need_more_information, message 'Where would you like me to play it?', options ['YouTube', 'Spotify', "
+        "'Somewhere else']. Never repeat a step the user declined.")},
     {"name": "Gmail", "keywords": ("gmail", "email", "emails", "e-mail", "inbox", "my mail"), "text": (
         "Open https://mail.google.com. Find mail from someone with the search box (named 'Search mail'): ui.type "
         "from:<address> then press Enter, then ui.click the first result. 'Reply' is a button on the open email; "
@@ -55,7 +74,8 @@ PLAYBOOKS: list[dict] = [
 
 def playbooks_for(goal: str, limit: int = 1800) -> str:
     g = goal.lower()
-    hits = [p for p in PLAYBOOKS if any(re.search(rf"\b{re.escape(k)}\b", g) for k in p["keywords"])]
+    hits = [p for p in PLAYBOOKS if any(re.search(rf"\b{re.escape(k)}\b", g) for k in p["keywords"])
+            and not any(re.search(rf"\b{re.escape(u)}\b", g) for u in p.get("unless", ()))]
     return "\n".join(f"[{p['name']}] {p['text']}" for p in hits)[:limit]
 
 

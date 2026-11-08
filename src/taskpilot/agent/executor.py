@@ -8,8 +8,9 @@ from collections import OrderedDict
 from ..policy import Policy
 from ..protocol import ActionRequest, ActionResult, GUI_TOOLS, Screenshot
 from .backend import Backend
-from .gate import window_allowed
+from .gate import window_access, window_allowed
 from ..tools import ToolContext, get_registry
+from ..tools.registry import NeedsAccess
 from .runner import ManagedProcesses, run_command
 
 PRIMITIVES = ["capture_screen", "get_active_window", "launch_application", "click",
@@ -33,6 +34,8 @@ class Executor:
         self._task_actions: dict[str, set[str]] = {}
         self._cache_size = cache_size
         self.estopped = False
+        self.persist = None                      # callable(kind, key, value) saving an "always" grant on this computer
+        self._task_grants: dict[str, list[tuple[str, str]]] = {}      # task id -> [(kind, key)] to revoke at the end
 
     # ------------------------------------------------------------ control
     def lookup(self, action_id: str) -> ActionResult | None:
@@ -43,6 +46,28 @@ class Executor:
             if (t := self._inflight.get(aid)) and not t.done():
                 t.cancel()
         self.managed.kill_task(task_id)
+
+    def end_task(self, task_id: str) -> None:
+        """A task finished: take back every 'just this time' grant it was given."""
+        for kind, key in self._task_grants.pop(task_id, []):
+            self.policy.revoke(kind, key)
+
+    async def _grant(self, req, a, result):
+        """Apply an access grant the USER approved in the app. Protected things are refused by policy.check_grant."""
+        value = None
+        if a.kind == "app":
+            value = await asyncio.to_thread(self.backend.resolve_app, a.target)
+            if value is None:
+                return result("error", error=f"could not find an app called '{a.target}' on this computer")
+        key = self.policy.grant(a.kind, a.target, value)
+        if a.remember and self.persist:
+            try:
+                self.persist(a.kind, key, value)
+            except Exception:
+                pass                                     # still granted for this session; just not saved
+        elif not a.remember:
+            self._task_grants.setdefault(req.task_id, []).append((a.kind, key))
+        return result(data={"granted": a.kind, "target": key, "remembered": bool(a.remember and self.persist)})
 
     def estop(self) -> None:
         self.estopped = True
@@ -89,14 +114,17 @@ class Executor:
             return result("denied", error="emergency stop active")
         d = self.policy.evaluate(a)       # server-side checks are repeated here, independently
         if d.verdict == "deny":
-            return result("denied", error=d.reason)
+            return result("denied", error=d.reason, data={"needs_access": d.access} if d.access else {})
+        if a.tool == "grant_access":
+            return await self._grant(req, a, result)
         # 'confirm' was resolved by the server before dispatch; the agent trusts only the channel.
         b = self.backend
         if self.policy.restrict_input_to_approved and a.tool in GUI_TOOLS and a.tool != "launch_application":
             w = await asyncio.to_thread(b.active_window)       # input only ever goes to an approved app
             gate = await window_allowed(self.policy, b, w.title if w else "", w.process if w else "")
             if not gate.allowed:
-                return result("denied", error=f"input blocked: {gate.reason}")
+                acc = await window_access(self.policy, b, w.title if w else "", w.process if w else "", gate)
+                return result("denied", error=f"input blocked: {gate.reason}", data={"needs_access": acc} if acc else {})
         try:
             t = a.tool
             if t == "app_tool":
@@ -128,7 +156,9 @@ class Executor:
                         except Exception:
                             pass
                     if not gate.allowed:
-                        return result("denied", error=f"screenshot not taken (privacy mode): {gate.reason}")
+                        acc = await window_access(self.policy, b, w.title if w else "", w.process if w else "", gate)
+                        return result("denied", error=f"screenshot not taken (privacy mode): {gate.reason}",
+                                      data={"needs_access": acc} if acc else {})
                     return result(screenshot=await asyncio.to_thread(b.screenshot_window, a.max_dimension))
                 return result(screenshot=await asyncio.to_thread(b.screenshot, a.max_dimension))
             if t == "get_active_window":
@@ -169,5 +199,7 @@ class Executor:
             return result()
         except asyncio.CancelledError:
             raise
+        except NeedsAccess as e:
+            return result("denied", error=e.reason, data={"needs_access": e.access})
         except Exception as e:
             return result("error", error=f"{type(e).__name__}: {e}")

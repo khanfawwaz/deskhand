@@ -124,6 +124,11 @@ class ApproveIn(BaseModel):
     approved: bool
 
 
+class AnswerIn(BaseModel):
+    choice: str | None = Field(None, max_length=60)      # one of the offered option ids
+    text: str | None = Field(None, max_length=1000)      # or free text (for questions)
+
+
 def _note(a: dict) -> str:
     return str(a.get("error") or a.get("verification") or a.get("decision") or "")[:NOTE_MAX]
 
@@ -137,7 +142,8 @@ def task_view(store, orch, t: dict, steps: bool = True) -> dict:
         "error": t.get("error"), "terminal": t["status"] in TERMINAL_VALUES,
         "pending_approval": None if not p else {
             "tool": p.get("tool"), "reason": p.get("reason"), "question": p.get("question"),
-            "params": p.get("params")},
+            "params": p.get("params"), "kind": p.get("kind", "confirm"), "options": p.get("options") or [],
+            "allow_text": bool(p.get("allow_text"))},
     }
     if steps:
         v["steps"] = [{"seq": a["seq"], "tool": a["tool"], "status": a["status"], "note": _note(a)}
@@ -325,6 +331,13 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
         if not orch.approve(tid, body.approved):
             raise HTTPException(409, "nothing is waiting for approval on this task")
         return {"approved": body.approved}
+
+    @app.post("/v1/tasks/{tid}/answer")
+    def answer(tid: str, body: AnswerIn, c: dict = Depends(client)):
+        own_task(tid, c)
+        if not orch.answer(tid, body.choice, body.text):
+            raise HTTPException(409, "nothing is waiting for that answer on this task")
+        return {"answered": True}
 
     @app.post("/v1/estop")
     async def estop(c: dict = Depends(client)):

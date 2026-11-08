@@ -7,6 +7,8 @@ through strict schema validation and the permission policy, so leniency here can
 """
 from __future__ import annotations
 
+import re
+
 import json
 import shlex
 from typing import Any
@@ -203,8 +205,12 @@ def _normalize_outcome(o: Any, top: dict) -> dict:
     kind = OUTCOME_ALIASES.get(kind, kind)
     if kind not in OUTCOMES:
         raise ValueError(f"unknown outcome '{kind}'")
+    raw_opts = o.get("options") or o.get("choices") or top.get("options") or []
+    if isinstance(raw_opts, str):
+        raw_opts = [x for x in re.split(r"[|,;/]", raw_opts)]
+    options = [str(x).strip()[:60] for x in raw_opts if isinstance(x, (str, int, float)) and str(x).strip()][:6]
     return {"outcome": kind, "message": str(o.get("message") or top.get("message") or "")[:2000],
-            "evidence": str(o.get("evidence") or top.get("evidence") or "")[:2000]}
+            "evidence": str(o.get("evidence") or top.get("evidence") or "")[:2000], "options": options}
 
 
 def normalize_proposal(raw: Any) -> dict:

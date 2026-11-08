@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -75,6 +76,9 @@ class Backend(ABC):
 
     def window_host(self, title: str) -> str | None:
         """Host (e.g. 'chatgpt.com') shown in a browser window's address bar, or None if unknown."""
+        return None
+
+    def resolve_app(self, name: str) -> str | None:
         return None
 
     def open_private(self, url: str) -> dict:
@@ -151,8 +155,37 @@ class WindowsBackend(Backend):
         except Exception:
             return None
 
+    def resolve_app(self, name: str) -> str | None:
+        """Find an installed app by (part of) its Start-menu name. Returns something launch() accepts, or None.
+        Uses Windows' own Start-menu index (covers classic and Store apps); the name is never put in a command line
+        unescaped (it is passed as an environment variable)."""
+        import json
+        clean = re.sub(r"[^\w .+\-]", "", name or "")[:60].strip()
+        if not clean:
+            return None
+        script = ("$n = $env:DESKHAND_APP_NAME; Get-StartApps | Where-Object { $_.Name -like \"*$n*\" } | "
+                  "Select-Object -First 8 | ConvertTo-Json -Compress")
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True,
+                           timeout=25, env={**os.environ, "DESKHAND_APP_NAME": clean}, creationflags=0x08000000)
+        if r.returncode != 0 or not r.stdout.strip():
+            return None
+        try:
+            apps = json.loads(r.stdout)
+        except ValueError:
+            return None
+        apps = apps if isinstance(apps, list) else [apps]
+        apps = [a for a in apps if isinstance(a, dict) and a.get("AppID") and a.get("Name")]
+        if not apps:
+            return None
+        best = next((a for a in apps if a["Name"].lower() == clean.lower()), None) or min(apps, key=lambda a: len(a["Name"]))
+        return "shell:AppsFolder\\" + best["AppID"]
+
     def launch(self, target: str) -> int | None:
         # `target` always comes from the local approved_apps table, never from the model.
+        if target.lower().startswith("shell:"):                       # a Start-menu app (classic or Store)
+            subprocess.Popen(["explorer.exe", target], shell=False, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return None
         p = subprocess.Popen([target], shell=False, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._launched[os.path.basename(target).lower()] = p.pid

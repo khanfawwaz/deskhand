@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .protocol import (
-    Action, AppToolCall, Click, DoubleClick, Hotkey, LaunchApplication, PressKey, RunCommand,
+    Action, AppToolCall, Click, DoubleClick, GrantAccess, Hotkey, LaunchApplication, PressKey, RunCommand,
     Scroll, TypeText,
 )
 
@@ -29,6 +29,38 @@ DEFAULT_UI_CONFIRM_NAMES = [
 ]
 DEFAULT_UI_DENY_TITLES = ["user account control", "windows security", "credential manager", "task manager",
                           "registry editor", "password manager"]
+
+# Sites Deskhand never operates, even if asked: sign-in, payment and credential pages.
+DEFAULT_DENY_HOSTS = ["accounts.google.com", "login.live.com", "login.microsoftonline.com", "paypal.com", "stripe.com",
+                      "bitwarden.com", "1password.com", "lastpass.com", "dashlane.com", "appleid.apple.com"]
+_SECOND_LEVEL = {"co", "com", "org", "net", "gov", "ac", "edu"}
+# Big companies host unrelated, PRIVATE services under one domain (mail.google.com, drive.google.com...). Approving
+# "google.com" for a search must never approve Gmail, so these are approved one exact host at a time.
+SHARED_DOMAINS = {"google.com", "microsoft.com", "live.com", "office.com", "apple.com", "icloud.com", "amazon.com",
+                  "yahoo.com", "facebook.com", "meta.com", "linkedin.com", "github.com", "dropbox.com", "outlook.com"}
+
+
+def is_shared(host: str) -> bool:
+    h = (host or "").lower().strip(".")
+    return any(h == d or h.endswith("." + d) for d in SHARED_DOMAINS)
+
+
+def base_domain(host: str) -> str:
+    """music.youtube.com -> youtube.com, www.bbc.co.uk -> bbc.co.uk: what a user thinks of as 'the site'."""
+    h = (host or "").lower().strip(".")
+    if is_shared(h):
+        return h                                           # exact host: www.google.com is not mail.google.com
+    labels = [x for x in h.split(".") if x]
+    if labels and labels[0] == "www":
+        labels = labels[1:]
+    if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in _SECOND_LEVEL:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:]) if len(labels) >= 2 else ".".join(labels)
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (name or "").lower())[:40]
+
 
 KNOWN_KEYS = {
     *"abcdefghijklmnopqrstuvwxyz0123456789",
@@ -56,6 +88,9 @@ DEFAULT_DENIED_ARG_PATTERNS = [
 class Decision:
     verdict: Verdict
     reason: str = ""
+    # Set when a "deny" is really "not approved YET": {"kind": "app"|"site"|"window", "target": ...}. The orchestrator
+    # then asks the user instead of failing the task. Never set for rules that must not be overridden.
+    access: dict | None = None
 
     @property
     def allowed(self) -> bool:
@@ -92,6 +127,10 @@ class Policy:
     # to the approved foreground window (and refused for any other), and window lists/titles are filtered.
     cloud_safe: bool = False
     allow_private_windows: bool = False      # browser.open_private is refused unless explicitly enabled
+    # When on, opening a website that was never approved is a request the USER answers (allow once / always / no),
+    # not a silent failure. The laptop's helper turns this on; the user's answer is the only way a site gets added.
+    require_site_approval: bool = False
+    deny_hosts: list[str] = field(default_factory=lambda: list(DEFAULT_DENY_HOSTS))
     # ui.click on a control with one of these names needs a human approval (sending, deleting, paying are
     # irreversible, so they never rest on the model's judgement alone).
     ui_confirm_names: list[str] = field(default_factory=lambda: list(DEFAULT_UI_CONFIRM_NAMES))
@@ -116,6 +155,8 @@ class Policy:
             restrict_input_to_approved=bool(d.get("restrict_input_to_approved", False)),
             cloud_safe=bool(d.get("cloud_safe", False)),
             allow_private_windows=bool(d.get("allow_private_windows", False)),
+            require_site_approval=bool(d.get("require_site_approval", False)),
+            deny_hosts=[h.lower() for h in d.get("deny_hosts", DEFAULT_DENY_HOSTS)],
             ui_confirm_names=list(d.get("ui_confirm_names", DEFAULT_UI_CONFIRM_NAMES)),
         )
 
@@ -130,9 +171,54 @@ class Policy:
             return Decision("allow")
         if any(w.lower() in t for w in self.ui_allowed_windows) or any(a.lower() in t for a in self.approved_apps):
             return Decision("allow")
-        if host and any(host.lower() == h or host.lower().endswith("." + h) for h in self.ui_allowed_hosts):
+        if host and self.site_allowed(host):
             return Decision("allow")
-        return Decision("deny", f"window '{title}' ({process}) is not an approved application")
+        return Decision("deny", f"window '{title}' ({process}) is not an approved application",
+                        access={"kind": "window", "target": title, "process": ntpath.basename(process or "")})
+
+    # ------------------------------------------------------------ user-granted access
+    def host_denied(self, host: str) -> bool:
+        h = (host or "").lower()
+        return any(h == d or h.endswith("." + d) for d in self.deny_hosts)
+
+    def site_allowed(self, host: str) -> bool:
+        h = (host or "").lower()
+        return any(h == a or (h.endswith("." + a) and not is_shared(a)) for a in self.ui_allowed_hosts)
+
+    def check_grant(self, kind: str, target: str) -> Decision:
+        """May the user's approval be applied? Protected things stay protected whatever anyone says."""
+        t = (target or "").lower()
+        if kind == "site" and self.host_denied(t):
+            return Decision("deny", f"Deskhand never operates sign-in or payment pages ({target})")
+        if kind == "window" and (ntpath.basename(t) in {x.lower() for x in self.ui_deny_processes}
+                                 or any(x.lower() in t for x in self.ui_deny_titles)):
+            return Decision("deny", f"'{target}' is a protected window")
+        if kind == "app" and _slug(target) in {ntpath.basename(x).lower().removesuffix(".exe") for x in self.ui_deny_processes}:
+            return Decision("deny", f"'{target}' is a protected application")
+        return Decision("allow")
+
+    def grant(self, kind: str, target: str, value: str | None = None) -> str:
+        """Add an approved site / app / window. Returns the normalised key stored (use it to revoke)."""
+        if kind == "site":
+            key = base_domain(target)
+            if key not in self.ui_allowed_hosts:
+                self.ui_allowed_hosts.append(key)
+        elif kind == "app":
+            key = _slug(target)
+            self.approved_apps[key] = value or target
+        else:                                              # window: approve the program, not one window title
+            key = ntpath.basename(value or target).lower()
+            if key and key not in {x.lower() for x in self.ui_extra_processes}:
+                self.ui_extra_processes.append(key)
+        return key
+
+    def revoke(self, kind: str, key: str) -> None:
+        if kind == "site":
+            self.ui_allowed_hosts = [h for h in self.ui_allowed_hosts if h != key]
+        elif kind == "app":
+            self.approved_apps.pop(key, None)
+        else:
+            self.ui_extra_processes = [x for x in self.ui_extra_processes if x.lower() != key]
 
     # ------------------------------------------------------------ helpers
     @staticmethod
@@ -169,7 +255,10 @@ class Policy:
     def _evaluate(self, a: Action) -> Decision:
         if isinstance(a, LaunchApplication):
             if a.app_id not in self.approved_apps:
-                return Decision("deny", f"application '{a.app_id}' is not approved")
+                return Decision("deny", f"application '{a.app_id}' is not approved",
+                                access={"kind": "app", "target": a.app_id})
+        elif isinstance(a, GrantAccess):
+            return self.check_grant(a.kind, a.target)
         elif isinstance(a, AppToolCall):
             return self._app_tool(a)
         elif isinstance(a, RunCommand):

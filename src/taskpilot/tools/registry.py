@@ -17,6 +17,14 @@ if TYPE_CHECKING:
     from ..agent.runner import ManagedProcesses
 
 
+class NeedsAccess(Exception):
+    """Raised by a tool when it is blocked only because the user has not approved this app/site/window yet.
+    The executor turns it into a denied result the orchestrator can ask the user about."""
+    def __init__(self, reason: str, access: dict):
+        super().__init__(reason)
+        self.reason, self.access = reason, access
+
+
 @dataclass
 class ToolContext:
     """What a handler may use on the agent. Handlers never see the model or the network."""

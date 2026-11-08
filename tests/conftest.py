@@ -83,6 +83,7 @@ class FakeBackend(Backend):
         self.ui = FakeUI()
         self.zooms: list[tuple] = []
         self.hosts: dict[str, str] = {}             # window title -> host shown in its address bar
+        self.apps = {"spotify": r"shell:AppsFolder\SpotifyAB.SpotifyMusic!Spotify"}      # what resolve_app can find
         self.active_process = ""                    # process of the foreground window (real Windows always has one)
 
     def display_size(self): return (2560, 1440)
@@ -141,6 +142,9 @@ class FakeBackend(Backend):
 
     def window_host(self, title):
         return self.hosts.get(title)
+
+    def resolve_app(self, name):
+        return self.apps.get(name.lower())
 
     def open_private(self, url):
         self.calls.append(("private_url", url))
@@ -249,6 +253,7 @@ class Loopback(DeviceConnection):
         self.ex.cancel_task(task_id)
 
     async def estop(self): self.ex.estop()
+    async def end_task(self, task_id): self.ex.end_task(task_id)
 
 
 @pytest.fixture(autouse=True)
@@ -288,10 +293,30 @@ class Env:
                                device_wait_s=0.5, confirm_timeout_s=2, cancel_grace_s=0.2,
                                action_timeout_s=2, screenshot_mode="always", prefer_ui=False), **cfg_over})
         self.orch = Orchestrator(self.store, self.hub, self.model, self.policy, cfg)
+        self.access_choice, self.question_reply, self.asked = "no", None, []
+
+    async def _answerer(self, tid):
+        """Stands in for the user: answers access requests with `access_choice` (default: decline, i.e. the old
+        'not approved = refused' behaviour) and questions with `question_reply` (default: leave them pending)."""
+        while True:
+            await asyncio.sleep(0.01)
+            p = self.orch.pending_approval(tid)
+            if not p:
+                continue
+            if p.get("kind") == "access":
+                self.asked.append(p)
+                self.orch.answer(tid, self.access_choice)
+            elif p.get("kind") == "question" and self.question_reply is not None:
+                self.asked.append(p)
+                self.orch.answer(tid, text=self.question_reply)
 
     async def run(self, goal="do it", **kw):
         tid = self.orch.submit("dev1", goal, **kw)
-        t = await asyncio.wait_for(self.orch.wait(tid), 10)
+        helper = asyncio.ensure_future(self._answerer(tid))
+        try:
+            t = await asyncio.wait_for(self.orch.wait(tid), 10)
+        finally:
+            helper.cancel()
         return tid, t
 
     def tools(self, tid):

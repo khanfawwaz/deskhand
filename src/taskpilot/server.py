@@ -273,9 +273,14 @@ def main() -> None:
     ap.add_argument("--policy", default="server_policy.json")
     ap.add_argument("--model", default=os.environ.get("TASKPILOT_MODEL", "qwen2.5vl:7b"))
     ap.add_argument("--provider", choices=["ollama", "openai"], default="ollama")
+    ap.add_argument("--text-model", default=os.environ.get("TASKPILOT_TEXT_MODEL"),
+                    help="two-model mode: the large text model that decides every step (needs --vision-model too)")
+    ap.add_argument("--vision-model", default=os.environ.get("TASKPILOT_VISION_MODEL"),
+                    help="two-model mode: the model that looks at screenshots")
+    ap.add_argument("--split-mode", choices=["describe", "route"], default=os.environ.get("TASKPILOT_SPLIT_MODE", "describe"))
     ap.add_argument("--base-url", default="https://integrate.api.nvidia.com/v1")
     ap.add_argument("--api-key-env", default="NVIDIA_API_KEY")
-    ap.add_argument("--allow-cloud-images", action="store_true",
+    ap.add_argument("--allow-cloud-images", action="store_true", default=os.environ.get("TASKPILOT_ALLOW_IMAGES") == "1",
                     help="permit screenshots to be sent to the hosted API (off = text only)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
@@ -300,8 +305,14 @@ def main() -> None:
     else:
         with open(args.policy, encoding="utf-8") as f:
             policy = Policy.from_dict(json.load(f))
-        model = make_runtime(args.provider, args.model, base_url=args.base_url, api_key_env=args.api_key_env,
-                             allow_cloud_images=args.allow_cloud_images)
+        if args.text_model and args.vision_model:
+            from .hosted import make_split_runtime
+            model = make_split_runtime(args.text_model, args.vision_model, base_url=args.base_url,
+                                       api_key_env=args.api_key_env, mode=args.split_mode)
+            print(f"two-model mode ({args.split_mode}): decides with {args.text_model}, sees with {args.vision_model}")
+        else:
+            model = make_runtime(args.provider, args.model, base_url=args.base_url, api_key_env=args.api_key_env,
+                                 allow_cloud_images=args.allow_cloud_images)
 
     orch = Orchestrator(store, hub, model, policy, Config(record_recipes=args.record_recipes))
     app = create_app(store, hub, orch, key)

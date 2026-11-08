@@ -12,8 +12,8 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..agent.runner import run_command
-from ..policy import Decision, Policy
-from .registry import Tool, ToolContext, ToolRegistry
+from ..policy import Decision, Policy, base_domain
+from .registry import NeedsAccess, Tool, ToolContext, ToolRegistry
 
 
 class _P(BaseModel):
@@ -190,6 +190,11 @@ def _check_url(a: UrlArgs, p: Policy) -> Decision:
         pass
     if p.allowed_domains and not any(host == d or host.endswith("." + d) for d in p.allowed_domains):
         return Decision("deny", f"domain '{host}' is not on the allowed list")
+    if p.host_denied(host):
+        return Decision("deny", f"Deskhand never operates sign-in or payment pages ({host})")
+    if p.require_site_approval and not p.site_allowed(host):
+        return Decision("deny", f"you have not approved {base_domain(host)} yet",
+                        access={"kind": "site", "target": base_domain(host)})
     return Decision("allow")
 
 
@@ -234,13 +239,22 @@ async def _windows_list(ctx: ToolContext, a: Empty) -> dict:
 async def _windows_focus(ctx: ToolContext, a: FocusArgs) -> dict:
     if ctx.policy.cloud_safe:
         from ..agent.gate import window_allowed
+        from ..agent.gate import window_access
         wins = await asyncio.to_thread(ctx.backend.list_windows)
-        ok = False
+        ok, blocked = False, None
         for w in wins:
-            if a.title.lower() in w["title"].lower() and (await window_allowed(ctx.policy, ctx.backend, w["title"], w["process"])).allowed:
-                ok = True
-                break
+            if a.title.lower() in w["title"].lower():
+                d = await window_allowed(ctx.policy, ctx.backend, w["title"], w["process"])
+                if d.allowed:
+                    ok = True
+                    break
+                if d.access and blocked is None:
+                    blocked = (w, d)
         if not ok:
+            if blocked:                       # a window like that exists, the user just has not approved it: ask them
+                w, d = blocked      # privacy mode: echo only what the model asked for, never the window's own title
+                raise NeedsAccess(f"no approved window matches '{a.title}'",
+                                  await window_access(ctx.policy, ctx.backend, w["title"], w["process"], d))
             return {"error": f"no approved window matches '{a.title}'"}
     d = await asyncio.to_thread(ctx.backend.focus_window, a.title)
     if not d.get("focused") and not d.get("error"):       # never report a silent non-focus as success
