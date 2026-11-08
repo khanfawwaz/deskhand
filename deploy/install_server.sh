@@ -1,20 +1,48 @@
 #!/usr/bin/env bash
-# Needs Python 3.11+ (python3 --version). Run once on the Linux server, from inside the cloned repo:   sudo bash deploy/install_server.sh
-# Sets up: a venv, the Deskhand service (starts at boot), and a timer that pulls GitHub every 2 minutes and restarts
-# the service when something new was pushed. Laptops then update themselves from this server.
+# Run once on the Linux server (Ubuntu/Debian, Python 3.11+), from inside the cloned repo:
+#
+#   sudo bash deploy/install_server.sh --domain deskhand.example.com     # public HTTPS, no Tailscale
+#   sudo bash deploy/install_server.sh --auto-domain                      # no domain? use <your-ip>.sslip.io
+#   sudo bash deploy/install_server.sh                                    # local only (127.0.0.1:8765)
+#
+# Sets up: a venv, the Deskhand service (starts at boot), a timer that pulls GitHub every 2 minutes and restarts the
+# service when something new was pushed, and (with a domain) Caddy as the public HTTPS front door with a free
+# Let's Encrypt certificate. Caddy only lets the app, the sign-in API and the helper endpoints through; the admin
+# endpoints are NOT reachable from the internet (manage those over SSH on localhost).
 set -euo pipefail
+
+DOMAIN=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain) DOMAIN="$2"; shift 2 ;;
+    --auto-domain) IP=$(curl -fsS https://api.ipify.org); DOMAIN="${IP//./-}.sslip.io"; shift ;;
+    *) echo "unknown option $1"; exit 2 ;;
+  esac
+done
+
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${SUDO_USER:-$(whoami)}"
 cd "$REPO"
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo "Python 3.11+ is required"; exit 1; }
+
 python3 -m venv .venv
 .venv/bin/pip install -q -e ".[server]"
 [ -f server_policy.json ] || cp server_policy.example.json server_policy.json     # the server-side safety rules (edit to taste)
-[ -f /etc/deskhand.env ] || {
+
+if [ ! -f /etc/deskhand.env ]; then
   KEY=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')
-  printf 'TASKPILOT_ADMIN_KEY=%s\nNVIDIA_API_KEY=\n# Sign-in by email (see README): your Gmail + an app password, and the address people use\nTASKPILOT_SMTP_USER=\nTASKPILOT_SMTP_PASSWORD=\nTASKPILOT_PUBLIC_URL=\n' "$KEY" > /etc/deskhand.env
+  printf 'TASKPILOT_ADMIN_KEY=%s\nNVIDIA_API_KEY=\n# Sign-in by email (see README): your Gmail + an app password\nTASKPILOT_SMTP_USER=\nTASKPILOT_SMTP_PASSWORD=\nTASKPILOT_PUBLIC_URL=\n' "$KEY" > /etc/deskhand.env
   chmod 600 /etc/deskhand.env
-  echo "Created /etc/deskhand.env - put your NVIDIA_API_KEY in it, then: sudo systemctl restart deskhand"
-}
+  echo "Created /etc/deskhand.env - put your NVIDIA_API_KEY (and Gmail app password) in it, then: sudo systemctl restart deskhand"
+fi
+if [ -n "$DOMAIN" ]; then
+  if grep -q '^TASKPILOT_PUBLIC_URL=' /etc/deskhand.env; then
+    sed -i "s#^TASKPILOT_PUBLIC_URL=.*#TASKPILOT_PUBLIC_URL=https://$DOMAIN#" /etc/deskhand.env
+  else
+    echo "TASKPILOT_PUBLIC_URL=https://$DOMAIN" >> /etc/deskhand.env
+  fi
+fi
+
 cat > /etc/systemd/system/deskhand.service <<UNIT
 [Unit]
 Description=Deskhand server
@@ -52,5 +80,29 @@ echo "$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart deskhand" > /etc/su
 chmod 440 /etc/sudoers.d/deskhand-restart
 systemctl daemon-reload
 systemctl enable --now deskhand.service deskhand-update.timer
-echo "Deskhand is running on 127.0.0.1:8765. For HTTPS over Tailscale (needed for voice + app install), run:"
-echo "  sudo tailscale serve --bg 8765"
+
+if [ -n "$DOMAIN" ]; then
+  if ! command -v caddy >/dev/null; then
+    apt-get update -qq
+    apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -qq
+    apt-get install -y -qq caddy
+  fi
+  sed "s#__DOMAIN__#$DOMAIN#g" "$REPO/deploy/Caddyfile" > /etc/caddy/Caddyfile
+  # Oracle Cloud's Ubuntu images block 80/443 in the VM's own firewall too (besides the cloud console's security list)
+  if command -v iptables >/dev/null && ! iptables -C INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null; then
+    iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+    iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+    command -v netfilter-persistent >/dev/null && netfilter-persistent save || true
+  fi
+  systemctl enable --now caddy
+  systemctl reload caddy
+  echo
+  echo "Deskhand is live at:  https://$DOMAIN/app/"
+  echo "If that does not load, open ports 80 and 443 in your cloud provider's firewall (Oracle: VCN > Security List > Ingress)."
+else
+  echo "Deskhand is running on 127.0.0.1:8765 only. Re-run with --domain your.domain (or --auto-domain) to publish it with HTTPS."
+fi
+echo "Admin key (for admin calls over SSH, never exposed publicly): sudo grep ADMIN_KEY /etc/deskhand.env"

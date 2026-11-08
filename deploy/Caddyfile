@@ -1,0 +1,18 @@
+# Public HTTPS front door for Deskhand. Caddy gets and renews the certificate by itself.
+# Only the app, the sign-in API and the helper endpoints are reachable from the internet. Everything that needs the
+# admin key (invites, workspaces, enrolling devices, recipes, metrics...) answers 404 here and works only on
+# localhost, i.e. over SSH.
+__DOMAIN__ {
+	@private path /admin* /pairing* /invites* /workspaces* /clients* /devices* /tasks* /recipes* /metrics* /estop* /docs* /redoc* /openapi.json
+	respond @private 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:8765 {
+		flush_interval -1
+	}
+}

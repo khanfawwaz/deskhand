@@ -197,3 +197,20 @@ quotas, Gmail aliases (`a.b+x@gmail.com`) counted as one person, one-time 15-min
 link's `#fragment` (never sent to any server log), and the link address comes only from `TASKPILOT_PUBLIC_URL` so a forged
 Host header cannot turn the email into a phishing link. You can still switch any workspace off or change its quota with
 `PATCH /workspaces/{id}`.
+
+
+## Putting the server on the internet (no Tailscale): Oracle Cloud or any VPS
+
+Run the whole server on a small public VM (Oracle's free tier is enough: the model runs at NVIDIA, not on the VM).
+Laptops and phones then reach it over normal HTTPS, from any network, with nothing to install on them.
+
+1. Create the VM (Ubuntu). In the cloud console open inbound ports **80 and 443** (Oracle: VCN > Security List > Ingress).
+2. SSH in, install Python 3.11+ and git, clone this repo.
+3. `sudo bash deploy/install_server.sh --domain deskhand.example.com` (point that domain's DNS A record at the VM first),
+   or `--auto-domain` to use a free `<your-ip>.sslip.io` name. Caddy fetches the HTTPS certificate by itself.
+4. Fill `/etc/deskhand.env` (NVIDIA key, Gmail app password) and `sudo systemctl restart deskhand`.
+
+What is reachable from the internet: the app, the sign-in API and the helper endpoints only. Everything that needs the
+admin key (invites, workspaces, enrolling devices, recipes) answers 404 publicly and works only on localhost over SSH,
+for example `curl -H "X-API-Key: $KEY" localhost:8765/workspaces`. The server sees each visitor's real address (Caddy
+forwards it), so the per-address rate limits work.
