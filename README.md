@@ -214,3 +214,9 @@ What is reachable from the internet: the app, the sign-in API and the helper end
 admin key (invites, workspaces, enrolling devices, recipes) answers 404 publicly and works only on localhost over SSH,
 for example `curl -H "X-API-Key: $KEY" localhost:8765/workspaces`. The server sees each visitor's real address (Caddy
 forwards it), so the per-address rate limits work.
+
+**Already running nginx (or another web server) on ports 80/443?** Do not use the `--domain` option: Caddy cannot share
+those ports. Install without it (`sudo bash deploy/install_server.sh`), then add Deskhand as one extra nginx site using
+`deploy/nginx-deskhand.conf` (the file's header lists the four commands: write the file, `nginx -t`, graceful reload,
+`certbot --nginx`). It does not touch your other sites. Run `sudo bash deploy/install_server.sh --check` first to see
+what is on the machine; it changes nothing.

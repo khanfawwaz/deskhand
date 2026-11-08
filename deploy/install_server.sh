@@ -50,7 +50,7 @@ if [ -n "$DOMAIN" ]; then
       fi
     fi
   done
-  [ "$CADDY_OK" = 1 ] || echo "      Add this to your existing web server instead: proxy https://$DOMAIN to 127.0.0.1:$PORT (see deploy/Caddyfile)."
+  [ "$CADDY_OK" = 1 ] || echo "      Use your existing web server instead: for nginx see deploy/nginx-deskhand.conf (a separate site, validated, graceful reload)."
 fi
 echo "  other services running on this machine (left alone):"
 systemctl list-units --type=service --state=running --no-legend 2>/dev/null | awk '{print "    - " $1}' | head -15
@@ -108,7 +108,7 @@ WorkingDirectory=$REPO
 EnvironmentFile=/etc/deskhand.env
 ExecStart=$REPO/.venv/bin/taskpilot-server --provider openai --model nvidia/nemotron-3.5-super-vl-120b-a12b --db $REPO/taskpilot.db --host 127.0.0.1 --port $PORT
 Restart=always
-RestartSec=3
+RestartSec=10
 [Install]
 WantedBy=multi-user.target
 UNIT
