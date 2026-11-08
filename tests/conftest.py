@@ -330,3 +330,26 @@ def make_env(tmp_path):
 
 def act(tool, **p): return {"reasoning": "r", "action": {"tool": tool, **p}}
 def done(evidence="Notepad visible"): return {"outcome": {"outcome": "done", "message": "ok", "evidence": evidence}}
+
+
+# The Windows helper is Windows software: its policy uses Windows path rules and these tests run real Windows-style
+# commands, junctions and file locations. They run in CI on a Windows runner and are skipped on Linux, where only the
+# server side (which is platform independent) is exercised.
+WINDOWS_ONLY = {
+    "test_files_are_graded_from_disk_not_from_the_claim", "test_run_command_exit_code_and_output",
+    "test_command_timeout_reported_not_success", "test_cancel_kills_managed_process",
+    "test_prompt_injection_text_stays_in_untrusted_channel", "test_commands_allowlist_dirs_and_subcommands",
+    "test_files_write_read_list_exists", "test_symlink_junction_escape_blocked_by_agent",
+    "test_write_policy_size_and_overwrite_needs_approval", "test_git_tools_on_real_repo",
+    "test_vscode_open_and_shell_meta_rejected", "test_tool_task_needs_no_screenshot",
+    "test_file_content_goes_to_untrusted_channel", "test_overwrite_flag_on_a_new_file_needs_no_approval",
+}
+
+
+def pytest_collection_modifyitems(config, items):
+    if sys.platform == "win32":
+        return
+    skip = pytest.mark.skip(reason="Windows-only behaviour (runs in CI on a Windows runner)")
+    for item in items:
+        if item.name in WINDOWS_ONLY:
+            item.add_marker(skip)
