@@ -220,3 +220,19 @@ those ports. Install without it (`sudo bash deploy/install_server.sh`), then add
 `deploy/nginx-deskhand.conf` (the file's header lists the four commands: write the file, `nginx -t`, graceful reload,
 `certbot --nginx`). It does not touch your other sites. Run `sudo bash deploy/install_server.sh --check` first to see
 what is on the machine; it changes nothing.
+
+## The Windows helper: what gets installed
+
+The one-line install puts everything under `%LOCALAPPDATA%\Deskhand` and needs no admin rights and **no Python** on the
+computer: it downloads the official embeddable Python (checksum pinned) into its own `runtime` folder and names the
+program `Deskhand.exe` with the Deskhand logo, so Task Manager shows "Deskhand", not "Python".
+
+- **Notification-area icon** (`DeskhandTray` task): the logo with a green/amber/grey dot for online / connecting / stopped.
+  Click for *Open Deskhand*, *Start*, *Stop*. It only reads `status.json`, which the helper keeps fresh.
+- **Helper** (`DeskhandAgent` task): starts at sign-in, restarts if it dies, updates itself from your server.
+- **Shortcuts** in Start > Deskhand: Start (Ctrl+Alt+P), Stop, Open app (Ctrl+Alt+O).
+- **Remove:** `scripts\uninstall_agent.ps1` (add `-Purge` to delete the folder too).
+- **Re-running the install line** on a computer with an older install migrates it (old virtual environment removed,
+  settings kept); the old entry stays in your app list until you remove it in Settings > Your computers.
+- Supported: 64-bit Intel/AMD Windows. The logo artwork lives in `src/taskpilot/branding.py`; `scripts/make_icons.py`
+  regenerates the web icons.

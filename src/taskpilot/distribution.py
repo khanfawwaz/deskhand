@@ -27,7 +27,7 @@ PKG = Path(__file__).resolve().parent
 TEMPLATE = PKG / "agent" / "install_template.ps1"
 
 # What the Windows agent needs installed in its private virtual environment (not part of the bundle).
-AGENT_REQUIREMENTS = ["pydantic>=2", "httpx", "websockets", "psutil", "mss", "pyautogui", "pillow", "uiautomation"]
+AGENT_REQUIREMENTS = ["pydantic>=2", "httpx", "websockets", "psutil", "mss", "pyautogui", "pillow", "uiautomation", "pystray"]
 
 
 class Bundle:

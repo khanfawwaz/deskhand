@@ -1,13 +1,18 @@
 <#
-.SYNOPSIS  Remove Deskhand from this computer: stops it, removes the sign-in task and shortcuts, deletes the token.
-           Your config and logs are kept unless you pass -Purge.
+.SYNOPSIS  Remove Deskhand from this computer: stops it, removes the sign-in tasks, shortcuts and token.
+           Your settings and logs are kept unless you pass -Purge (which deletes the whole Deskhand folder).
 #>
 param([switch] $Purge)
 $ErrorActionPreference = "SilentlyContinue"
-Stop-ScheduledTask -TaskName "DeskhandAgent"
-Unregister-ScheduledTask -TaskName "DeskhandAgent" -Confirm:$false
-Remove-Item -Recurse -Force (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Deskhand")
 $dir = Join-Path $env:LOCALAPPDATA "Deskhand"
+foreach ($t in "DeskhandAgent", "DeskhandTray") {
+  Stop-ScheduledTask -TaskName $t
+  Unregister-ScheduledTask -TaskName $t -Confirm:$false
+}
+# only processes that run from Deskhand's own folder
+Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item -Recurse -Force (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Deskhand")
 Remove-Item -Force (Join-Path $dir "agent.token")
 if ($Purge) { Remove-Item -Recurse -Force $dir }
-Write-Host "Deskhand removed. (The device is still enrolled on the server: revoke it there too.)"
+Write-Host "Deskhand removed. (The computer is still listed in your app: use Settings > Your computers > Remove.)"

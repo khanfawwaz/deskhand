@@ -4,7 +4,8 @@ Runs the agent from apps/<current version>, restarts it when it exits to apply a
 installs new Python dependencies when a version asks for them, and rolls back to the previous version if a new one
 keeps dying right after start.
 
-    pythonw launcher.py <install_dir>
+    Deskhand.exe launcher.py <install_dir>          # the helper, restarted and updated as needed
+    Deskhand.exe launcher.py <install_dir> tray     # the notification-area icon
 """
 from __future__ import annotations
 
@@ -66,7 +67,8 @@ def main(root: Path) -> int:
             return 2
         ensure_requirements(root, vdir, log)
         env = {**os.environ, "PYTHONPATH": str(vdir), "PILOT_VERSION": version, "PILOT_HOME": str(root)}
-        cmd = [sys.executable, "-m", "taskpilot.agent.main", "--config", str(root / "agent.json"),
+        # boot.py puts the version folder on sys.path itself: an embedded Python ignores PYTHONPATH
+        cmd = [sys.executable, str(root / "boot.py"), str(vdir), "taskpilot.agent.main", "--config", str(root / "agent.json"),
                "--token-file", str(root / "agent.token"), "--log-file", str(root / "agent.log")]
         log(f"starting agent {version}")
         t0 = time.time()
@@ -94,5 +96,17 @@ def main(root: Path) -> int:
         time.sleep(5)
 
 
+def tray(root: Path) -> int:
+    """Run the notification-area icon once from the current version (it is a separate, optional process)."""
+    version = read(root / "apps" / "current.txt")
+    vdir = root / "apps" / version
+    if not (vdir / "taskpilot").is_dir():
+        return 2
+    env = {**os.environ, "PILOT_HOME": str(root), "PILOT_VERSION": version}
+    return subprocess.run([sys.executable, str(root / "boot.py"), str(vdir), "taskpilot.agent.tray"], env=env,
+                          cwd=str(root), creationflags=0x08000000 if os.name == "nt" else 0).returncode
+
+
 if __name__ == "__main__":
-    raise SystemExit(main(Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent))
+    home = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
+    raise SystemExit(tray(home) if "tray" in sys.argv[2:] else main(home))

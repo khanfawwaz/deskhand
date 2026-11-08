@@ -28,6 +28,20 @@ from .executor import CAPABILITIES, Executor
 
 log = logging.getLogger("taskpilot.agent")
 ACTIVITY = {"inflight": 0, "last": time.time()}
+
+
+def write_status(connected: bool, device_id: str = "") -> None:
+    """Tell the tray icon (and anyone looking) whether we are connected. Best effort: never breaks the helper."""
+    home = os.environ.get("PILOT_HOME")
+    if not home:
+        return
+    try:
+        tmp = Path(home) / "status.json.tmp"
+        tmp.write_text(json.dumps({"connected": connected, "at": time.time(), "device": device_id,
+                                   "version": os.environ.get("PILOT_VERSION", "")}), encoding="utf-8")
+        os.replace(tmp, Path(home) / "status.json")
+    except OSError:
+        pass
 RESTART_FOR_UPDATE = 75
 
 
@@ -39,11 +53,13 @@ async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbe
         if ack.get("type") != "welcome":
             raise PermissionError(f"server rejected agent: {ack}")
         log.info("connected as %s", device_id)
+        write_status(True, device_id)
 
         async def beat():
             while True:
                 await asyncio.sleep(heartbeat_s)
                 await ws.send(json.dumps({"type": "heartbeat"}))
+                write_status(True, device_id)
 
         async def run_action(msg):
             ACTIVITY["inflight"] += 1
@@ -73,6 +89,7 @@ async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbe
                 elif kind == "revoked":
                     raise PermissionError("credentials revoked")
         finally:
+            write_status(False, device_id)
             hb.cancel()
             for t in tasks:
                 t.cancel()
@@ -80,6 +97,7 @@ async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbe
 
 async def connect_forever(cfg: dict, token: str, ex: Executor) -> None:
     backoff = 1.0
+    write_status(False, cfg.get("device_id", ""))               # started, not connected yet
     while True:
         try:
             await serve_once(cfg["server_url"], cfg["device_id"], token, ex, cfg.get("heartbeat_s", 10))
