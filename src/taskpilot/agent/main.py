@@ -129,7 +129,7 @@ async def run_agent(cfg: dict, token: str, ex: Executor) -> int:
 def _read_token(path: str | None) -> str:
     if not path or not os.path.isfile(path):
         return ""
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         return f.read().strip()
 
 
@@ -159,7 +159,7 @@ def main() -> None:
                             format="%(asctime)s %(levelname)s %(message)s")
     else:
         logging.basicConfig(level=logging.INFO)
-    with open(args.config, encoding="utf-8") as f:
+    with open(args.config, encoding="utf-8-sig") as f:         # utf-8-sig: Windows PowerShell writes a BOM
         cfg = json.load(f)
     token = os.environ.get("TASKPILOT_TOKEN") or _read_token(args.token_file or cfg.get("token_file"))
     if not token:

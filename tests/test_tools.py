@@ -357,3 +357,16 @@ def test_agent_reads_token_from_a_file_and_lowers_priority(tmp_path):
     assert _read_token(str(f)) == "secret-token"
     assert _read_token(str(tmp_path / "missing")) == "" and _read_token(None) == ""
     _lower_priority()                                   # best effort, must never raise
+
+
+def test_agent_config_and_token_files_with_a_utf8_bom_still_load(tmp_path):
+    """Windows PowerShell 5.1 writes UTF-8 files with a BOM; the helper must not crash on them (it once did, silently)."""
+    import json
+    from taskpilot.agent.main import _read_token
+    cfg = tmp_path / "agent.json"
+    cfg.write_bytes(b"\xef\xbb\xbf" + json.dumps({"server_url": "wss://x/agent/ws", "device_id": "d"}).encode())
+    with open(cfg, encoding="utf-8-sig") as f:
+        assert json.load(f)["device_id"] == "d"
+    tok = tmp_path / "t"
+    tok.write_bytes(b"\xef\xbb\xbfsecret\n")
+    assert _read_token(str(tok)) == "secret"

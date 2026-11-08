@@ -56,6 +56,7 @@ if ($LASTEXITCODE -ne 0) { throw "could not install components" }
 
 # 4. Settings (kept if you re-run this later). Starts with a small, safe allowlist; edit it to allow more.
 $cfgPath = Join-Path $Dir "agent.json"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)      # Windows PowerShell's "utf8" adds a BOM that breaks JSON readers
 $docs = Join-Path $env:USERPROFILE "Documents\Deskhand"
 New-Item -ItemType Directory -Force $docs | Out-Null
 if (-not (Test-Path $cfgPath)) {
@@ -66,11 +67,11 @@ if (-not (Test-Path $cfgPath)) {
       allowed_dirs = @($docs); ui_allowed_windows = @("Calculator", "Notepad")
       restrict_input_to_approved = $true; cloud_safe = $true
     }
-  } | ConvertTo-Json -Depth 6 | Set-Content -Path $cfgPath -Encoding utf8
+  } | ConvertTo-Json -Depth 6 | ForEach-Object { [System.IO.File]::WriteAllText($cfgPath, $_, $utf8NoBom) }
 } else {
   $c = Get-Content $cfgPath -Raw | ConvertFrom-Json
   $c.server_url = $join.ws_url; $c.device_id = $join.device_id
-  $c | ConvertTo-Json -Depth 8 | Set-Content -Path $cfgPath -Encoding utf8
+  [System.IO.File]::WriteAllText($cfgPath, ($c | ConvertTo-Json -Depth 8), $utf8NoBom)
 }
 
 # 5. Start at sign-in, hidden, restarts if it dies; below-normal priority is set by the agent itself
