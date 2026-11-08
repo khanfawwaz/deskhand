@@ -407,8 +407,7 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
         if path.startswith("/app"):
             for k, v in APP_HEADERS.items():
                 resp.headers.setdefault(k, v)
-            if path.endswith(("sw.js", "index.html", "/app/", "manifest.webmanifest")):
-                resp.headers["Cache-Control"] = "no-cache"
+            resp.headers["Cache-Control"] = "no-cache"          # always re-check (ETag): an update must show up at once
         elif path.startswith(("/v1", "/pairing", "/clients", "/agent", "/i/", "/invites", "/workspaces")):
             resp.headers["Cache-Control"] = "no-store"
         return resp

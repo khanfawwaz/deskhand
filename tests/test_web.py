@@ -61,3 +61,26 @@ def test_javascript_logic_tests_pass_under_node():
     assert files, "no JavaScript test files found"
     r = subprocess.run(["node", "--test", *files], capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-1000:]
+
+
+def test_long_text_cannot_stretch_the_page_wider_than_the_screen():
+    """A long task title once made the whole app wider than the window (sideways scrolling, content pushed off the right)."""
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    assert "grid-template-columns: minmax(0, 1fr)" in css                     # a grid column may not grow to fit its widest line
+    assert ".history .g { min-width: 0;" in css and ".history button { min-width: 0; }" in css
+    assert "overflow-wrap: anywhere" in css
+
+
+def test_app_files_are_always_revalidated_so_updates_show_up_at_once(tmp_path):
+    from fastapi.testclient import TestClient
+    from taskpilot.devices import DeviceHub
+    from taskpilot.model import ScriptedRuntime
+    from taskpilot.orchestrator import Config, Orchestrator
+    from taskpilot.policy import Policy
+    from taskpilot.server import create_app
+    from taskpilot.store import Store
+    store, hub = Store(), DeviceHub()
+    app = create_app(store, hub, Orchestrator(store, hub, ScriptedRuntime([]), Policy.from_dict({}), Config()), "k")
+    with TestClient(app) as c:
+        for f in ("style.css", "app.js", "logic.js", "index.html", "sw.js"):
+            assert c.get(f"/app/{f}").headers["cache-control"] == "no-cache", f      # a stale stylesheet once survived an update
