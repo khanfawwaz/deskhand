@@ -57,5 +57,7 @@ def test_the_app_never_stores_anything_but_its_own_token_and_settings():
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_javascript_logic_tests_pass_under_node():
-    r = subprocess.run(["node", "--test", str(Path(__file__).parent / "js")], capture_output=True, text=True, timeout=120)
+    files = sorted(str(f) for f in (Path(__file__).parent / "js").glob("*.test.mjs"))   # newer Node wants files, not a folder
+    assert files, "no JavaScript test files found"
+    r = subprocess.run(["node", "--test", *files], capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-1000:]
