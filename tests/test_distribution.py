@@ -152,3 +152,12 @@ def test_launcher_rolls_back_a_version_that_keeps_crashing(tmp_path, monkeypatch
     assert launcher.main(tmp_path) == 0
     assert runs == ["bad", "bad", "bad", "good"]
     assert (apps / "current.txt").read_text() == "good" and "bad" in (apps / "bad.txt").read_text()
+
+
+def test_the_running_version_is_public_and_matches_the_checkout(env):
+    c, *_ = env
+    r = c.get("/v1/version")
+    assert r.status_code == 200
+    v = r.json()
+    assert set(v) == {"commit", "on_disk_commit", "bundle"} and len(v["bundle"]) == 12
+    assert v["commit"] == v["on_disk_commit"]                    # nothing changed since this process started

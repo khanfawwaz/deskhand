@@ -60,6 +60,16 @@ class Bundle:
         return self._version, self._data
 
 
+def _git_commit() -> str:
+    """Short commit of the checkout this code lives in ('' if it is not a git checkout)."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(PKG), capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
 class JoinIn(BaseModel):
     code: str = Field(min_length=4, max_length=20)
     name: str = Field("Laptop", min_length=1, max_length=60)
@@ -90,6 +100,13 @@ def install_distribution(app: FastAPI, store, client_dep: Callable, bundle: Bund
         if not x_device_id or not x_device_token or not store.authenticate_device(x_device_id, x_device_token):
             raise HTTPException(401, "unknown or revoked device")
         return x_device_id
+
+    started_commit = _git_commit()                  # what THIS running process was started from
+
+    @app.get("/v1/version")
+    def running_version():
+        """Public and harmless: which code is this server process running? (Lets anyone compare it with GitHub.)"""
+        return {"commit": started_commit, "on_disk_commit": _git_commit(), "bundle": bundle.build()[0]}
 
     @app.post("/v1/add-device")
     def add_device(request: Request, _c: dict = Depends(client_dep)):

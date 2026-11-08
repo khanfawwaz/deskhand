@@ -131,7 +131,7 @@ OnUnitActiveSec=2min
 WantedBy=timers.target
 UNIT
 # the update service restarts deskhand, which needs permission: allow exactly that one command, nothing else
-echo "$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart deskhand" > /etc/sudoers.d/deskhand-restart
+echo "$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart deskhand, /usr/bin/systemctl restart deskhand" > /etc/sudoers.d/deskhand-restart
 chmod 440 /etc/sudoers.d/deskhand-restart
 systemctl daemon-reload
 systemctl enable --now deskhand.service deskhand-update.timer
