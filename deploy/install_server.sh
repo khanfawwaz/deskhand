@@ -82,7 +82,11 @@ echo "Using $($PY --version)"
 
 "$PY" -m venv .venv
 .venv/bin/pip install -q -e ".[server]"
+# This script runs as root (sudo), but the update job runs as $USER_NAME and must be able to rewrite these files
+# (pip's egg-info folder, the venv, the checkout). Without this the automatic update fails at the pip step.
+chown -R "$USER_NAME":"$USER_NAME" "$REPO"
 [ -f server_policy.json ] || cp server_policy.example.json server_policy.json     # the server-side safety rules (edit to taste)
+chown "$USER_NAME":"$USER_NAME" server_policy.json
 
 if [ ! -f /etc/deskhand.env ]; then
   KEY=$("$PY" -c 'import secrets;print(secrets.token_urlsafe(32))')
