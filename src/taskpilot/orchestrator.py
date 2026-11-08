@@ -26,6 +26,7 @@ from .protocol import (
 )
 from .states import TERMINAL, TaskState
 from .store import Store
+from . import skills as skillbook
 from .tools import get_registry
 
 log = logging.getLogger("taskpilot.orchestrator")
@@ -57,6 +58,7 @@ class Config:
     ground_evidence_min: float = 0.4   # share of a "done" claim's distinctive terms that must appear in what was observed
     ground_message_min: float = 0.35   # same, for the answer in the final message of read-the-result tasks
     learn: bool = True               # keep a non-sensitive summary of verified successes as hints for similar goals
+    learn_skills: bool = True        # keep one up-to-date skill per app/site, built from structured facts of every task
     question_timeout_s: float = 900  # how long to wait for the user to answer a question or an access request
     max_questions: int = 5           # questions the model may ask the user in one task
 
@@ -173,6 +175,7 @@ class Orchestrator:
             self.store.transition(tid, TaskState.FAILED, "internal error", error=f"internal error: {e!r}")
         finally:
             self.store.add_metric(tid, "task_total", (time.monotonic() - t0) * 1000)
+            self._learn_skills(tid, task)
             if conn := self.hub.get(task["device_id"]):
                 try:
                     await asyncio.wait_for(conn.end_task(tid), 3)      # 'just this time' access ends with the task
@@ -210,6 +213,11 @@ class Orchestrator:
         observed: list[str] = []                   # everything Pilot actually read: the ground truth for "done" claims
         attempts: dict[str, list[bool]] = {}       # exact action -> outcomes, to stop repeating what does not work
         exp_hints = self._experience_hints(task["goal"], task.get("workspace"))
+        skill_map = self._skill_map(task)                 # {skill id: skill} for this workspace
+        skills_shown: set[str] = set()
+        for sk in skillbook.matching(task["goal"], list(skill_map.values())):
+            skills_shown.add(sk["id"])
+            exp_hints = (exp_hints + "\n" if exp_hints else "") + skillbook.render(sk)
         skipped = 0
         questions = 0
         access_state: dict[tuple, str] = {}        # (kind, target) -> "granted" | "no": never ask twice in one task
@@ -456,6 +464,12 @@ class Orchestrator:
             entry = await self._verify(tid, dev, action_id, action, result, uncertain, seq)
             history.append(entry)
             self._harvest(observed, entry)
+            if entry.get("status") == "ok" and skill_map:
+                opened = skillbook.subject_of_call(label, params.get("args", params) if isinstance(params, dict) else {})
+                sid = f"{opened[0]}:{opened[1]}" if opened else ""
+                if sid in skill_map and sid not in skills_shown:
+                    skills_shown.add(sid)
+                    notes.append(skillbook.render(skill_map[sid]))     # "you have done this before: here is what worked"
             good = entry.get("status") == "ok" and entry.get("verified") is not False
             if good:                                       # what a VERIFIED action was about (path, url, control name)
                 observed.append(label + " " + json.dumps(params, default=str))
@@ -520,6 +534,26 @@ class Orchestrator:
             return hints_for(goal, self.store.list_experiences(workspace=workspace))   # never another workspace's history
         except Exception:
             return ""
+
+    def _skill_map(self, task: dict) -> dict[str, dict]:
+        if not self.cfg.learn_skills:
+            return {}
+        try:
+            return {s["id"]: s for s in self.store.list_skills(task.get("workspace") or "main")}
+        except Exception:
+            return {}
+
+    def _learn_skills(self, tid: str, task: dict) -> None:
+        """After EVERY task (worked or not): create or update the skill of each app/site it touched."""
+        if not self.cfg.learn_skills:
+            return
+        try:
+            status = (self.store.get_task(tid) or {}).get("status")
+            ws = task.get("workspace") or "main"
+            skillbook.learn(self.store.list_actions(tid), task["goal"], status == TaskState.COMPLETED.value,
+                            lambda k: self.store.get_skill(ws, k), lambda k, v: self.store.save_skill(ws, k, v))
+        except Exception:
+            log.exception("could not update skills for %s", tid)
 
     def _learn(self, tid: str, task: dict) -> None:
         if not self.cfg.learn:

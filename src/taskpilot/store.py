@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS experiences(
 CREATE TABLE IF NOT EXISTS workspaces(
   id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at REAL NOT NULL,
   max_tasks_per_day INTEGER NOT NULL DEFAULT 100, disabled INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS skills(
+  workspace TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, updated_at REAL NOT NULL,
+  PRIMARY KEY(workspace, key));
 CREATE TABLE IF NOT EXISTS metrics(
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, name TEXT NOT NULL,
   value_ms REAL NOT NULL, at REAL NOT NULL);
@@ -262,6 +265,26 @@ class SqliteStore:
         rows = (self._q("SELECT * FROM experiences WHERE workspace=? ORDER BY created_at DESC LIMIT ?", workspace, limit)
                 if workspace else self._q("SELECT * FROM experiences ORDER BY created_at DESC LIMIT ?", limit))
         return [json.loads(r["data"]) | {"id": r["id"]} for r in rows]
+
+    # -------------------------------------------------------------- skills (what was learned about each app / site)
+    def get_skill(self, workspace: str, key: str) -> dict | None:
+        r = self._q("SELECT data FROM skills WHERE workspace=? AND key=?", workspace, key)
+        return json.loads(r[0]["data"]) if r else None
+
+    def save_skill(self, workspace: str, key: str, data: dict) -> None:
+        self._q("INSERT INTO skills(workspace,key,data,updated_at) VALUES(?,?,?,?) "
+                "ON CONFLICT(workspace,key) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
+                workspace, key, json.dumps(data), data.get("updated_at", time.time()))
+
+    def list_skills(self, workspace: str) -> list[dict]:
+        return [json.loads(r["data"]) | {"id": r["key"]} for r in
+                self._q("SELECT key, data FROM skills WHERE workspace=? ORDER BY updated_at DESC", workspace)]
+
+    def delete_skill(self, workspace: str, key: str) -> bool:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM skills WHERE workspace=? AND key=?", (workspace, key))
+            self._db.commit()
+            return cur.rowcount > 0
 
     # -------------------------------------------------------------- paired controller apps ("clients")
     def create_client(self, name: str, workspace: str = DEFAULT_WS) -> tuple[str, str]:

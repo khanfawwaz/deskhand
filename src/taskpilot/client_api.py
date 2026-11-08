@@ -339,6 +339,29 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
             raise HTTPException(409, "nothing is waiting for that answer on this task")
         return {"answered": True}
 
+    # ---------------------------------------------------------------- what Deskhand has learned (per workspace)
+    @app.get("/v1/skills")
+    def skills_list(c: dict = Depends(client)):
+        return [{"id": s["id"], "title": s.get("title"), "kind": s.get("kind"), "runs": s.get("runs", {}),
+                 "version": s.get("version", 1), "updated_at": s.get("updated_at")}
+                for s in store.list_skills(c["workspace"])]
+
+    @app.get("/v1/skills/{sid:path}")
+    def skill_get(sid: str, c: dict = Depends(client)):
+        from .skills import render
+        s = store.get_skill(c["workspace"], sid)
+        if s is None:
+            raise HTTPException(404, "unknown skill")
+        return {"id": sid, "title": s.get("title"), "kind": s.get("kind"), "runs": s.get("runs", {}),
+                "version": s.get("version", 1), "updated_at": s.get("updated_at"), "text": render(s, 3000),
+                "pitfalls": [p.get("text") for p in s.get("pitfalls", [])]}
+
+    @app.delete("/v1/skills/{sid:path}")
+    def skill_forget(sid: str, c: dict = Depends(client)):
+        if not store.delete_skill(c["workspace"], sid):
+            raise HTTPException(404, "unknown skill")
+        return {"forgotten": sid}
+
     @app.post("/v1/estop")
     async def estop(c: dict = Depends(client)):
         await orch.emergency_stop(workspace=c["workspace"])          # only YOUR tasks and laptops

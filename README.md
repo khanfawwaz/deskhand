@@ -277,3 +277,32 @@ If the vision model is down, the text model carries on without the picture. With
 (`--model`) does both. **Images:** without `TASKPILOT_ALLOW_IMAGES=1` no screenshot ever leaves the server, so a vision
 model cannot see anything; each laptop's privacy mode still crops screenshots to approved windows.
 Compare setups with the evaluation suite: `python -m taskpilot.evals.run --suite live --text-model <id>`.
+
+## Skills: Deskhand learns each app and keeps the notes up to date
+
+After **every** task (worked or not) Deskhand groups what it did by the app or site involved (Spotify, youtube.com,
+Calculator...) and creates or updates **one skill per app**:
+
+| Part | What it keeps |
+|---|---|
+| open | how it was opened last time it worked |
+| controls | controls that really worked (window, role, name, id) and how often |
+| routes | step-by-step routes that worked per kind of goal; similar goals merge, the shortest/newest route wins |
+| pitfalls | steps that failed; forgotten again once a later run gets past them |
+| runs | how many tasks worked / failed |
+
+The next task that names the app, or opens it mid-task, is handed the skill as a hint ("verify: the app may have
+changed"). Every new run updates the same skill, so it improves with use. Settings > *What Deskhand has learned* lists the
+skills with **View** and **Forget**; they belong to the workspace, never another one's.
+
+Safety: skills are built from structured facts only (tool names, hosts, control names that were actually clicked). Names
+are cleaned to one short line and dropped if they look like an instruction, a link, a password or a key, so a hostile page
+cannot plant text that would be replayed to the model later. Typed text, file contents and page text are never stored.
+Turn it off with `Config(learn_skills=False)`.
+
+## Running two models by default
+
+New servers are set up with a large text model that decides and a vision model that looks (see "Two models" above):
+`TASKPILOT_TEXT_MODEL`, `TASKPILOT_VISION_MODEL`, `TASKPILOT_SPLIT_MODE=describe`, `TASKPILOT_ALLOW_IMAGES=1` in
+`/etc/deskhand.env`. On an existing server add those lines and `sudo systemctl restart deskhand`; the log then prints
+`two-model mode (describe): decides with ..., sees with ...`.

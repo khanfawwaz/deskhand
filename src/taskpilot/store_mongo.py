@@ -219,6 +219,22 @@ class MongoStore:
         return [{k: v for k, v in d.items() if k not in ("_id", "workspace")} | {"id": d["_id"]}
                 for d in self._db.experiences.find(q).sort("created_at", -1).limit(limit)]
 
+    # -------------------------------------------------------------- skills
+    def get_skill(self, workspace: str, key: str) -> dict | None:
+        d = self._db.skills.find_one({"_id": f"{workspace}:{key}"})
+        return None if d is None else {k: v for k, v in d.items() if k not in ("_id", "workspace", "key")}
+
+    def save_skill(self, workspace: str, key: str, data: dict) -> None:
+        self._db.skills.replace_one({"_id": f"{workspace}:{key}"}, {**data, "workspace": workspace, "key": key,
+                                                                    "_id": f"{workspace}:{key}"}, upsert=True)
+
+    def list_skills(self, workspace: str) -> list[dict]:
+        return [{k: v for k, v in d.items() if k not in ("_id", "workspace", "key")} | {"id": d["key"]}
+                for d in self._db.skills.find({"workspace": workspace}).sort("updated_at", -1)]
+
+    def delete_skill(self, workspace: str, key: str) -> bool:
+        return self._db.skills.delete_one({"_id": f"{workspace}:{key}"}).deleted_count > 0
+
     # -------------------------------------------------------------- paired controller apps ("clients")
     def create_client(self, name: str, workspace: str = DEFAULT_WS) -> tuple[str, str]:
         cid, token = uuid.uuid4().hex[:10], secrets.token_urlsafe(32)

@@ -11,13 +11,14 @@ import time
 from urllib.parse import urlparse
 
 from .grounding import STOP
+from .hygiene import line, safe
 
 SKIP_TOOLS = {"capture_screen", "invalid", "done", "windows.list", "get_active_window"}
 
 
 def _short(s: object, n: int = 60) -> str:
-    s = " ".join(str(s or "").split())
-    return s if len(s) <= n else s[: n - 1] + "…"
+    s = line(s, n)                                   # one line, harmless characters
+    return s if safe(s) else "(name withheld)"      # never store text that looks like an instruction or a secret
 
 
 def summarize_step(row: dict) -> str | None:

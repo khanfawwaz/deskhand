@@ -414,6 +414,28 @@
   // ------------------------------------------------------------------ settings menu + install
   function saveSettings() { ls.set('pilot.settings', JSON.stringify(S.settings)); }
 
+  async function loadSkills() {
+    const ul = $('skills'); if (!ul) return;
+    ul.textContent = '';
+    let list = [];
+    try { list = await api('/v1/skills'); } catch { return; }
+    if (!list.length) { const li = document.createElement('li'); li.className = 'sub'; li.textContent = 'Nothing yet. It learns as you use it.'; ul.appendChild(li); return; }
+    list.forEach((s) => {
+      const li = document.createElement('li'); li.style.flexWrap = 'wrap';
+      const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = s.title;
+      const st = document.createElement('span'); st.className = 'sub'; st.textContent = (s.runs.ok || 0) + ' worked';
+      const view = document.createElement('button'); view.type = 'button'; view.textContent = 'View';
+      const del = document.createElement('button'); del.type = 'button'; del.textContent = 'Forget';
+      const pre = document.createElement('pre'); pre.hidden = true; pre.style.cssText = 'width:100%;white-space:pre-wrap;font-size:.78rem;margin:.3rem 0;color:var(--muted)';
+      view.onclick = async () => {
+        if (!pre.hidden) { pre.hidden = true; return; }
+        try { const d = await api('/v1/skills/' + encodeURIComponent(s.id)); pre.textContent = d.text; pre.hidden = false; } catch (e) { alert(e.message); }
+      };
+      del.onclick = async () => { if (confirm('Forget what Deskhand learned about ' + s.title + '?')) { try { await api('/v1/skills/' + encodeURIComponent(s.id), { method: 'DELETE' }); } catch { /* gone */ } loadSkills(); } };
+      li.append(nm, st, view, del, pre); ul.appendChild(li);
+    });
+  }
+
   async function loadMembers() {
     const ul = $('members');
     try {
@@ -437,7 +459,7 @@
 
   function setupMenu() {
     const menu = $('menu');
-    $('menuBtn').onclick = () => { $('optAuto').checked = S.settings.auto; $('optSpeak').checked = S.settings.speak; $('optNotify').checked = S.settings.notify && Notification.permission === 'granted'; $('addController').hidden = true; $('addLaptop').hidden = true; renderComputers(); loadMembers(); menu.showModal(); };
+    $('menuBtn').onclick = () => { $('optAuto').checked = S.settings.auto; $('optSpeak').checked = S.settings.speak; $('optNotify').checked = S.settings.notify && Notification.permission === 'granted'; $('addController').hidden = true; $('addLaptop').hidden = true; renderComputers(); loadMembers(); loadSkills(); menu.showModal(); };
     $('optAuto').onchange = (e) => { S.settings.auto = e.target.checked; saveSettings(); };
     $('optSpeak').onchange = (e) => { S.settings.speak = e.target.checked; saveSettings(); };
     $('optNotify').onchange = async (e) => {
