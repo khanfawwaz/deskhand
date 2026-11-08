@@ -102,10 +102,10 @@
 
       <form id="composer" class="composer card" autocomplete="off">
         <div class="target">
-          <label for="deviceSel">Run on</label>
-          <span id="devDot" class="dot" aria-hidden="true"></span>
-          <select id="deviceSel" aria-label="Computer to control"></select>
+          <span class="lbl" id="targetsLbl">Run on</span>
+          <div id="targets" class="targets" role="group" aria-labelledby="targetsLbl"></div>
         </div>
+        <p id="targetNote" class="hint" aria-live="polite"></p>
         <textarea id="goal" rows="3" maxlength="4000" placeholder="What should I do? For example: open Notepad and write a shopping list." aria-label="Command"></textarea>
         <div id="examples" class="chips" aria-label="Examples"></div>
         <div class="row">

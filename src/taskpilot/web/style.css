@@ -126,7 +126,13 @@ h3.sec { font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transfo
 .chips button:hover { color: var(--text); }
 .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .dot[data-on="1"] { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
-.target select { flex: 1; }
+.target { align-items: flex-start; }
+.target .lbl { font-size: .85rem; color: var(--muted); padding-top: .55rem; white-space: nowrap; }
+.targets { display: flex; flex-wrap: wrap; gap: .4rem; flex: 1; }
+.tchip { display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .8rem; border-radius: 999px; font-size: .9rem; background: var(--surface-2); }
+.tchip[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 20%, var(--surface-2)); font-weight: 600; }
+.tchip[data-online="0"] { opacity: .75; }
+.tag { font-size: .75rem; color: var(--muted); margin-left: .4rem; }
 .list { list-style: none; margin: 0 0 .6rem; padding: 0; display: grid; gap: .15rem; }
 .list li { display: flex; align-items: center; gap: .6rem; padding: .5rem .2rem; border-bottom: 1px solid var(--line); font-size: .93rem; }
 .list li:last-child { border-bottom: 0; }

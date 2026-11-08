@@ -12,7 +12,7 @@
 
   const S = {
     token: ls.get('pilot.token'), me: null, devices: [], tasks: new Map(), currentId: null,
-    deviceId: ls.get('pilot.device'), listening: false, rec: null, countdown: null, installEvt: null, seenTerminal: new Set(),
+    targets: new Set(JSON.parse(ls.get('pilot.targets', '[]') || '[]')), listening: false, rec: null, countdown: null, installEvt: null, seenTerminal: new Set(),
     settings: Object.assign({ auto: true, speak: false, notify: false }, JSON.parse(ls.get('pilot.settings', '{}') || '{}')),
   };
 
@@ -117,19 +117,40 @@
 
   const EXAMPLES = ['Open Notepad and write a shopping list', 'Open Calculator and add 7 and 5', "What's the latest AI news today?", 'Open YouTube and play something relaxing'];
 
+  function saveTargets() { ls.set('pilot.targets', JSON.stringify([...S.targets])); }
+
+  function deviceName(id) { const d = S.devices.find((x) => x.device_id === id); return d ? d.name : id; }
+
+  function renderTargets() {
+    const box = $('targets');
+    box.textContent = '';
+    S.devices.forEach((d) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tchip'; b.dataset.online = d.online ? '1' : '0';
+      b.setAttribute('aria-pressed', S.targets.has(d.device_id) ? 'true' : 'false');
+      const dot = document.createElement('span'); dot.className = 'dot'; dot.dataset.on = d.online ? '1' : '0';
+      const nm = document.createElement('span'); nm.textContent = d.name + (d.online ? '' : ' (offline)');
+      b.append(dot, nm);
+      b.onclick = () => { if (S.targets.has(d.device_id)) S.targets.delete(d.device_id); else S.targets.add(d.device_id); saveTargets(); renderTargets(); };
+      box.appendChild(b);
+    });
+    const chosen = S.devices.filter((d) => S.targets.has(d.device_id));
+    const off = chosen.filter((d) => !d.online);
+    const note = $('targetNote');
+    if (!chosen.length) note.textContent = 'Tap a computer to choose where this runs. Pick several to send the same command to all of them.';
+    else if (off.length) note.textContent = off.map((d) => d.name).join(', ') + (off.length > 1 ? ' are' : ' is') + ' offline. On that computer open Deskhand from the Start menu (or press Ctrl+Alt+P) to bring it online.';
+    else note.textContent = chosen.length > 1 ? 'Sending to ' + chosen.length + ' computers at once.' : '';
+  }
+
   function renderDevices() {
-    const sel = $('deviceSel');
-    sel.innerHTML = '';
     const none = !S.devices.length;
     $('setup').hidden = !none; $('composer').hidden = none;
-    if (none) { sel.disabled = true; S.hadDevices = false; return; }
-    if (S.hadDevices === false && !$('setup').dataset.seen) { /* first computer just appeared */ }
-    sel.disabled = false;
-    S.devices.forEach((d) => sel.add(new Option(d.name + (d.online ? '' : ' (offline)'), d.device_id)));
-    const keep = S.devices.find((d) => d.device_id === S.deviceId) || S.devices.find((d) => d.online) || S.devices[0];
-    sel.value = keep.device_id; S.deviceId = keep.device_id;
-    $('devDot').dataset.on = keep.online ? '1' : '0';
-    if (S.hadDevices === false) toast(keep.name + ' is connected. Try a command below.');
+    if (none) { S.hadDevices = false; return; }
+    // forget chosen computers that no longer exist; default to the first online one
+    for (const id of [...S.targets]) if (!S.devices.some((d) => d.device_id === id)) S.targets.delete(id);
+    if (!S.targets.size) { const pick = S.devices.find((d) => d.online) || S.devices[0]; S.targets.add(pick.device_id); }
+    saveTargets(); renderTargets();
+    if (S.hadDevices === false) toast(S.devices[0].name + ' is connected. Try a command below.');
     S.hadDevices = true;
     const ex = $('examples');
     if (!ex.children.length) EXAMPLES.forEach((t) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = () => { $('goal').value = t; $('goal').focus(); }; ex.appendChild(b); });
@@ -241,6 +262,7 @@
     items.forEach((t) => {
       const li = document.createElement('li'), b = document.createElement('button'); b.type = 'button';
       const g = document.createElement('span'); g.className = 'g'; g.textContent = t.goal;
+      if (S.devices.length > 1 && t.device_id) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = 'on ' + deviceName(t.device_id); g.appendChild(tg); }
       const c = document.createElement('span'); c.className = 'chip'; c.textContent = L.statusLabel(t.status); c.dataset.tone = L.statusTone(t.status);
       b.append(g, c); b.onclick = () => { selectTask(t.id); window.scrollTo({ top: 0, behavior: 'smooth' }); };
       li.appendChild(b); ul.appendChild(li);
@@ -263,11 +285,24 @@
     cancelCountdown();
     $('sendBtn').disabled = true;
     try {
-      const r = await api('/v1/tasks', { method: 'POST', body: { goal, device_id: S.deviceId || undefined } });
-      $('goal').value = ''; $('voiceLine').textContent = '';
-      S.currentId = r.task_id;
-      S.tasks.set(r.task_id, await api('/v1/tasks/' + r.task_id));
-      renderCurrent(); renderHistory();
+      const chosen = S.devices.filter((d) => S.targets.has(d.device_id));
+      const live = chosen.filter((d) => d.online), skipped = chosen.filter((d) => !d.online);
+      if (!live.length) { $('voiceLine').textContent = chosen.length ? deviceName(chosen[0].device_id) + ' is offline: open Deskhand on it first.' : 'Choose a computer to run this on.'; $('sendBtn').disabled = false; return; }
+      let first = null;
+      const failed = [];
+      for (const d of live) {
+        try {
+          const r = await api('/v1/tasks', { method: 'POST', body: { goal, device_id: d.device_id } });
+          S.tasks.set(r.task_id, await api('/v1/tasks/' + r.task_id));
+          if (!first) first = r.task_id;
+        } catch (e) { failed.push(d.name + ': ' + e.message); }
+      }
+      if (first) { $('goal').value = ''; $('voiceLine').textContent = ''; S.currentId = first; renderCurrent(); renderHistory(); }
+      const notes = [];
+      if (live.length > 1 && first) notes.push('Sent to ' + (live.length - failed.length) + ' computers.');
+      if (skipped.length) notes.push('Skipped offline: ' + skipped.map((d) => d.name).join(', ') + '.');
+      if (failed.length) notes.push(failed.join(' '));
+      if (notes.length) $('voiceLine').textContent = notes.join(' ');
     } catch (e) { $('voiceLine').textContent = e.message; }
     $('sendBtn').disabled = false;
   }
@@ -415,7 +450,6 @@
     $('composer').addEventListener('submit', (e) => { e.preventDefault(); run($('goal').value); });
     $('goal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run($('goal').value); } });
     $('goal').addEventListener('input', cancelCountdown);
-    $('deviceSel').addEventListener('change', (e) => { S.deviceId = e.target.value; ls.set('pilot.device', S.deviceId); });
     $('micBtn').addEventListener('click', toggleMic);
     $('approveBtn').onclick = () => decide(true);
     $('denyBtn').onclick = () => decide(false);

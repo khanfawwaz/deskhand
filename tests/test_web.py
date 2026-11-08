@@ -51,7 +51,7 @@ def test_service_worker_precaches_real_files_and_never_touches_the_api():
 def test_the_app_never_stores_anything_but_its_own_token_and_settings():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     keys = set(re.findall(r"ls\.(?:get|set|del)\('([^']+)'", js))
-    assert keys <= {"pilot.token", "pilot.device", "pilot.settings"}
+    assert keys <= {"pilot.token", "pilot.device", "pilot.targets", "pilot.settings"}
     assert "eval(" not in js and "innerHTML = '" not in js.replace("innerHTML = ''", "")   # no dynamic code / html strings
 
 
