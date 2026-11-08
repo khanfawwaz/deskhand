@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# Run once on the Linux server (Ubuntu/Debian, Python 3.11+), from inside the cloned repo:
+# Run on the Linux server (Ubuntu/Debian), from inside the cloned repo:
 #
+#   sudo bash deploy/install_server.sh --check                          # look only: report conflicts, change nothing
 #   sudo bash deploy/install_server.sh --domain deskhand.example.com     # public HTTPS, no Tailscale
 #   sudo bash deploy/install_server.sh --auto-domain                      # no domain? use <your-ip>.sslip.io
 #   sudo bash deploy/install_server.sh                                    # local only (127.0.0.1:8765)
+#   options: --port 8765   (the port Deskhand listens on, on 127.0.0.1 only)
 #
-# Sets up: a venv, the Deskhand service (starts at boot), a timer that pulls GitHub every 2 minutes and restarts the
-# service when something new was pushed, and (with a domain) Caddy as the public HTTPS front door with a free
-# Let's Encrypt certificate. Caddy only lets the app, the sign-in API and the helper endpoints through; the admin
-# endpoints are NOT reachable from the internet (manage those over SSH on localhost).
+# This server may run other things. The script therefore NEVER stops, kills, restarts or reconfigures anything that is
+# not Deskhand: if ports 80/443 are already in use by something else it leaves them alone (and tells you how to add
+# Deskhand to that web server instead); an existing Caddy is only ever *reloaded*, never restarted, and its config is
+# backed up and validated before and after.
 set -euo pipefail
 
-DOMAIN=""
+DOMAIN=""; CHECK=0; PORT=8765
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
     --auto-domain) IP=$(curl -fsS https://api.ipify.org); DOMAIN="${IP//./-}.sslip.io"; shift ;;
+    --check) CHECK=1; shift ;;
+    --port) PORT="$2"; shift 2 ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
 done
@@ -23,6 +27,37 @@ done
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${SUDO_USER:-$(whoami)}"
 cd "$REPO"
+
+listening() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
+who_listens() { ss -ltnpH "sport = :$1" 2>/dev/null | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -1; }
+
+# ---------------------------------------------------------------- preflight (read-only)
+PROBLEMS=0; CADDY_OK=1
+echo "== Preflight: nothing is changed in this step"
+if listening "$PORT" && ! systemctl is-active --quiet deskhand; then
+  echo "  [!] 127.0.0.1:$PORT is already used by '$(who_listens "$PORT")'. Pick another with --port N. Deskhand will not touch it."
+  PROBLEMS=1
+fi
+if [ -n "$DOMAIN" ]; then
+  for p in 80 443; do
+    if listening "$p"; then
+      w=$(who_listens "$p")
+      if [ "$w" = "caddy" ]; then
+        echo "  [i] port $p is served by an existing Caddy: Deskhand will be added to it (reload only, nothing restarted)."
+      else
+        echo "  [!] port $p is in use by '$w'. Deskhand will NOT start Caddy or touch that service."
+        CADDY_OK=0
+      fi
+    fi
+  done
+  [ "$CADDY_OK" = 1 ] || echo "      Add this to your existing web server instead: proxy https://$DOMAIN to 127.0.0.1:$PORT (see deploy/Caddyfile)."
+fi
+echo "  other services running on this machine (left alone):"
+systemctl list-units --type=service --state=running --no-legend 2>/dev/null | awk '{print "    - " $1}' | head -15
+if [ "$CHECK" = 1 ]; then echo "== --check: stopping here, nothing was changed."; exit "$PROBLEMS"; fi
+[ "$PROBLEMS" = 0 ] || { echo "Fix the problem above, then run again."; exit 1; }
+
+# ---------------------------------------------------------------- Deskhand itself
 # Deskhand needs Python 3.11+. Ubuntu 22.04 ships 3.10, so install 3.11 from the deadsnakes archive when needed.
 find_python() {
   for c in python3.13 python3.12 python3.11 python3; do
@@ -34,7 +69,7 @@ find_python() {
 }
 PY=$(find_python || true)
 if [ -z "$PY" ]; then
-  echo "Python 3.11+ not found: installing python3.11 (deadsnakes)"
+  echo "Python 3.11+ not found: installing python3.11 (deadsnakes). The system python3 is left unchanged."
   apt-get update -qq
   apt-get install -y -qq software-properties-common
   add-apt-repository -y ppa:deadsnakes/ppa
@@ -42,7 +77,6 @@ if [ -z "$PY" ]; then
   apt-get install -y -qq python3.11 python3.11-venv
   PY=python3.11
 fi
-# the venv module ships separately on Debian/Ubuntu
 "$PY" -c 'import ensurepip, venv' 2>/dev/null || apt-get install -y -qq "$(basename "$PY")-venv"
 echo "Using $($PY --version)"
 
@@ -72,7 +106,7 @@ After=network-online.target
 User=$USER_NAME
 WorkingDirectory=$REPO
 EnvironmentFile=/etc/deskhand.env
-ExecStart=$REPO/.venv/bin/taskpilot-server --provider openai --model nvidia/nemotron-3.5-super-vl-120b-a12b --db $REPO/taskpilot.db --host 127.0.0.1 --port 8765
+ExecStart=$REPO/.venv/bin/taskpilot-server --provider openai --model nvidia/nemotron-3.5-super-vl-120b-a12b --db $REPO/taskpilot.db --host 127.0.0.1 --port $PORT
 Restart=always
 RestartSec=3
 [Install]
@@ -102,7 +136,8 @@ chmod 440 /etc/sudoers.d/deskhand-restart
 systemctl daemon-reload
 systemctl enable --now deskhand.service deskhand-update.timer
 
-if [ -n "$DOMAIN" ]; then
+# ---------------------------------------------------------------- public HTTPS (only when it cannot disturb anything)
+if [ -n "$DOMAIN" ] && [ "$CADDY_OK" = 1 ]; then
   if ! command -v caddy >/dev/null; then
     apt-get update -qq
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gpg
@@ -111,19 +146,39 @@ if [ -n "$DOMAIN" ]; then
     apt-get update -qq
     apt-get install -y -qq caddy
   fi
-  sed "s#__DOMAIN__#$DOMAIN#g" "$REPO/deploy/Caddyfile" > /etc/caddy/Caddyfile
-  # Oracle Cloud's Ubuntu images block 80/443 in the VM's own firewall too (besides the cloud console's security list)
-  if command -v iptables >/dev/null && ! iptables -C INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null; then
-    iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
-    iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
-    command -v netfilter-persistent >/dev/null && netfilter-persistent save || true
+  mkdir -p /etc/caddy
+  sed "s#__DOMAIN__#$DOMAIN#g; s#127.0.0.1:8765#127.0.0.1:$PORT#g" "$REPO/deploy/Caddyfile" > /etc/caddy/deskhand.caddy
+  if [ -s /etc/caddy/Caddyfile ] && ! grep -q "deskhand.caddy" /etc/caddy/Caddyfile; then
+    cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak-deskhand"          # never lose someone else's config
+    printf '\nimport /etc/caddy/deskhand.caddy\n' >> /etc/caddy/Caddyfile
+    if ! caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+      cp /etc/caddy/Caddyfile.bak-deskhand /etc/caddy/Caddyfile
+      echo "[!] The existing Caddy config did not validate with Deskhand added; restored it unchanged."
+      CADDY_OK=0
+    fi
+  elif [ ! -s /etc/caddy/Caddyfile ]; then
+    echo "import /etc/caddy/deskhand.caddy" > /etc/caddy/Caddyfile
   fi
-  systemctl enable --now caddy
-  systemctl reload caddy
-  echo
-  echo "Deskhand is live at:  https://$DOMAIN/app/"
-  echo "If that does not load, open ports 80 and 443 in your cloud provider's firewall (Oracle: VCN > Security List > Ingress)."
+  if [ "$CADDY_OK" = 1 ]; then
+    # the VM's own firewall (Oracle images block 80/443 by default); only adds allow rules, removes nothing
+    if command -v iptables >/dev/null && ! iptables -C INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+      command -v netfilter-persistent >/dev/null && netfilter-persistent save || true
+    fi
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy                                              # existing Caddy: reload only, never restart
+    else
+      systemctl enable --now caddy                                        # nothing was using 80/443, so this is safe
+    fi
+    sleep 2
+    systemctl is-active --quiet caddy && echo "Deskhand is live at:  https://$DOMAIN/app/" \
+      || { echo "[!] Caddy is not running. See why (read-only): sudo journalctl -u caddy -n 40 --no-pager"; }
+    echo "If the address does not load, open ports 80 and 443 in your cloud provider's firewall (Oracle: VCN > Security List > Ingress)."
+  fi
+elif [ -n "$DOMAIN" ]; then
+  echo "Skipped the public HTTPS part (see the preflight notes above); Deskhand itself is running on 127.0.0.1:$PORT."
 else
-  echo "Deskhand is running on 127.0.0.1:8765 only. Re-run with --domain your.domain (or --auto-domain) to publish it with HTTPS."
+  echo "Deskhand is running on 127.0.0.1:$PORT only. Re-run with --domain your.domain (or --auto-domain) to publish it with HTTPS."
 fi
 echo "Admin key (for admin calls over SSH, never exposed publicly): sudo grep ADMIN_KEY /etc/deskhand.env"
