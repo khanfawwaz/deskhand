@@ -306,3 +306,24 @@ New servers are set up with a large text model that decides and a vision model t
 `TASKPILOT_TEXT_MODEL`, `TASKPILOT_VISION_MODEL`, `TASKPILOT_SPLIT_MODE=describe`, `TASKPILOT_ALLOW_IMAGES=1` in
 `/etc/deskhand.env`. On an existing server add those lines and `sudo systemctl restart deskhand`; the log then prints
 `two-model mode (describe): decides with ..., sees with ...`.
+
+## Deskhand is a real Windows app (Task Manager, Start menu, tray)
+
+The installer makes Deskhand a proper app, not a hidden Python script:
+
+- **Task Manager > Apps** lists it as **Deskhand**, next to Discord, Claude and the rest, with the desk logo. Windows only
+  puts a program under *Apps* when it has a window, so Deskhand has a small control window: whether this computer is
+  online, **Open Deskhand**, **Pause / Resume**, **Quit Deskhand**.
+- **Closing the window keeps it running** in the notification area near the clock (like Discord). Click the icon to bring
+  the window back; launching Deskhand again from the Start menu also just brings it forward (no second copy).
+- **Easy to stop:** *Quit Deskhand*, the tray menu, or *End task* in Task Manager all stop it **and** the helper it runs
+  (the helper lives in a Windows job object tied to the app), so nothing is left running.
+- **One process name:** `Deskhand.exe` with "Deskhand" as its description and the logo as its icon. The installer brings
+  its own private Python, so no Python install is needed.
+- **Start menu + desktop shortcut** "Deskhand" (Ctrl+Alt+P), and "Deskhand - Open in browser" (Ctrl+Alt+O).
+- **Updates:** when a new version arrives the app restarts itself (so the window code updates too) and comes back.
+- Re-running the install line on a computer with an older install migrates it (the two old scheduled tasks are replaced by
+  one `Deskhand` task); remove everything with `scripts\uninstall_agent.ps1`.
+
+Code: `taskpilot/agent/app.py` (window + tray, plain Win32 through ctypes, no GUI toolkit), `launcher.py` (the Supervisor:
+start/stop/restart/rollback), `boot.py` (`--root` starts the current version straight from the install folder).
