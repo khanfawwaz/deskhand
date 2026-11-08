@@ -73,20 +73,97 @@ def test_boot_runs_a_module_from_the_given_version_folder(tmp_path):
     assert "ARGS ['--x', '1']" in out.stdout
 
 
+class Proc:
+    """A fake helper process that stays alive until terminated (or exits at once with `code`)."""
+    def __init__(self, code=None): self.returncode, self.terminated, self.waited = code, False, False
+    def poll(self): return self.returncode
+    def terminate(self): self.terminated, self.returncode = True, 1
+    def kill(self): self.terminate()
+    def wait(self, timeout=None): self.waited = True; return self.returncode
+
+
+def _install(tmp_path, version="v1"):
+    (tmp_path / "apps" / version / "taskpilot").mkdir(parents=True)
+    (tmp_path / "apps" / "current.txt").write_text(version)
+
+
 def test_the_supervisor_starts_the_helper_through_boot_py(tmp_path, monkeypatch):
-    apps = tmp_path / "apps"
-    (apps / "v1" / "taskpilot").mkdir(parents=True)
-    (apps / "current.txt").write_text("v1")
+    _install(tmp_path)
     seen = []
-
-    class R:
-        returncode = 0
-
-    monkeypatch.setattr(launcher.subprocess, "run", lambda cmd, env=None, **kw: (seen.append((cmd, env)), R())[1])
+    monkeypatch.setattr(launcher.subprocess, "Popen", lambda cmd, env=None, **kw: (seen.append((cmd, env)), Proc(0))[1])
     assert launcher.main(tmp_path) == 0
     cmd, env = seen[0]
-    assert cmd[1] == str(tmp_path / "boot.py") and cmd[2] == str(apps / "v1") and cmd[3] == "taskpilot.agent.main"
+    assert cmd[1] == str(tmp_path / "boot.py") and cmd[2] == str(tmp_path / "apps" / "v1") and cmd[3] == "taskpilot.agent.main"
     assert env["PILOT_HOME"] == str(tmp_path) and env["PILOT_VERSION"] == "v1"
+
+
+def test_the_window_can_pause_and_resume_the_helper(tmp_path, monkeypatch):
+    import time
+    _install(tmp_path)
+    procs = []
+    monkeypatch.setattr(launcher.subprocess, "Popen", lambda cmd, env=None, **kw: (procs.append(Proc()), procs[-1])[1])
+    sup = launcher.Supervisor(tmp_path)
+    sup.start()
+    for _ in range(100):
+        if procs:
+            break
+        time.sleep(0.02)
+    assert sup.running and len(procs) == 1
+    sup.stop()                                              # "Pause"
+    assert procs[0].terminated and not sup.running
+    sup.start()                                             # "Resume"
+    for _ in range(100):
+        if len(procs) == 2:
+            break
+        time.sleep(0.02)
+    assert len(procs) == 2 and sup.running
+    sup.stop()
+
+
+def test_a_new_version_makes_the_app_restart_itself_so_its_own_code_updates(tmp_path, monkeypatch):
+    _install(tmp_path)
+    monkeypatch.setattr(launcher.subprocess, "Popen", lambda cmd, env=None, **kw: Proc(launcher.RESTART_FOR_UPDATE))
+    called = []
+    assert launcher.Supervisor(tmp_path, on_update=lambda: called.append(1))._loop() == launcher.RESTART_FOR_UPDATE
+    assert called == [1]                                    # the app is told; it relaunches itself
+
+
+# ------------------------------------------------------------------ starting straight from the install folder
+def test_boot_root_mode_runs_the_current_version_and_sets_the_environment(tmp_path):
+    pkg = tmp_path / "apps" / "v7" / "demo_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "main.py").write_text("import os, sys\nprint('V', os.environ['PILOT_VERSION'], os.environ['PILOT_HOME'] == sys.argv[0] or True, sys.argv[1:])\n")
+    (tmp_path / "apps" / "current.txt").write_text("v7")
+    boot = Path(launcher.__file__).with_name("boot.py")
+    out = subprocess.run([sys.executable, str(boot), "--root", str(tmp_path), "demo_pkg.main", "--minimized"],
+                         capture_output=True, text=True, env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"})
+    assert out.returncode == 0, out.stderr
+    assert "V v7" in out.stdout and "['--minimized']" in out.stdout
+
+
+# ------------------------------------------------------------------ the app window's wording
+def test_the_window_explains_each_state_plainly():
+    from taskpilot.agent.app import computer_name, status_text
+    assert status_text("online", False)[0] == "Online" and "control this computer" in status_text("online", False)[1]
+    assert status_text("connecting", False)[0].startswith("Connecting")
+    assert status_text("online", True)[0] == "Paused"                                # paused wins over the helper's state
+    assert status_text("stopped", False)[0].startswith("Starting")
+
+
+def test_the_window_shows_which_computer_this_is(tmp_path):
+    from taskpilot.agent.app import computer_name
+    assert computer_name(tmp_path) == ""
+    (tmp_path / "agent.json").write_bytes(b"\xef\xbb\xbf" + json.dumps({"device_id": "OFFICE-PC-1"}).encode())
+    assert computer_name(tmp_path) == "OFFICE-PC-1"
+    (tmp_path / "status.json").write_text(json.dumps({"device": "OFFICE-PC-1-live"}))
+    assert computer_name(tmp_path) == "OFFICE-PC-1-live"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="job objects are a Windows feature")
+def test_the_helper_is_tied_to_the_app_so_ending_the_app_ends_it():
+    job = launcher._make_job()
+    assert job is not None                                  # a kill-on-close job object was created
 
 
 # ------------------------------------------------------------------ what the tray icon shows

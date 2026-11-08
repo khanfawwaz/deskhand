@@ -1,9 +1,5 @@
-"""The Deskhand icon in the Windows notification area: shows whether this computer is online and lets you start, stop
-or open Deskhand without touching a command line.
-
-It never talks to the server itself. It only reads `status.json`, which the helper keeps up to date, and starts/stops
-the helper's scheduled task. Needs pystray + Pillow.
-"""
+"""Shared helpers for the Deskhand app's window and notification icon: reading the helper's status file, the address of the
+web app, and the logo with a status dot. Nothing here talks to the server."""
 from __future__ import annotations
 
 import json
@@ -48,16 +44,6 @@ def app_url(home: Path) -> str:
         return ""
 
 
-def _schtasks(verb: str) -> None:
-    subprocess.run(["schtasks", verb, "/tn", TASK], capture_output=True, creationflags=NO_WINDOW)
-
-
-def _single_instance() -> bool:
-    import ctypes
-    ctypes.windll.kernel32.CreateMutexW(None, False, "Deskhand.Tray.Singleton")
-    return ctypes.windll.kernel32.GetLastError() != 183          # ERROR_ALREADY_EXISTS
-
-
 def badge(state: str, size: int = 64):
     """The logo with a small status dot: green online, amber starting, grey stopped."""
     from PIL import Image, ImageDraw
@@ -70,50 +56,3 @@ def badge(state: str, size: int = 64):
     d.ellipse((cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2), fill=(7, 7, 29, 255))
     d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=colour + (255,))
     return img
-
-
-def run(home: Path) -> None:
-    import pystray
-    if os.name == "nt" and not _single_instance():
-        return
-    state, text = read_status(home)
-
-    def open_app(icon=None, item=None):
-        url = app_url(home)
-        if url:
-            webbrowser.open(url)
-
-    menu = pystray.Menu(
-        pystray.MenuItem(lambda item: read_status(home)[1], None, enabled=False),
-        pystray.MenuItem("Open Deskhand", open_app, default=True),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Start", lambda icon, item: _schtasks("/run")),
-        pystray.MenuItem("Stop", lambda icon, item: _schtasks("/end")),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit this icon", lambda icon, item: icon.stop()),
-    )
-    icon = pystray.Icon("Deskhand", badge(state), "Deskhand: " + text, menu)
-
-    def watch():
-        last = state
-        while True:
-            time.sleep(3)
-            s, t = read_status(home)
-            if s != last:
-                icon.icon = badge(s)
-                last = s
-            icon.title = "Deskhand: " + t
-            try:
-                icon.update_menu()
-            except Exception:
-                pass
-    icon.run(setup=lambda i: (setattr(i, "visible", True), threading.Thread(target=watch, daemon=True).start()))
-
-
-def main() -> None:
-    home = Path(os.environ.get("PILOT_HOME") or (sys.argv[1] if len(sys.argv) > 1 else Path.cwd()))
-    run(home)
-
-
-if __name__ == "__main__":
-    main()

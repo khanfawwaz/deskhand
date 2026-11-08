@@ -1,6 +1,7 @@
 # Deskhand installer. The server filled in its own address and your one-time code.
-# Per-user (no admin, no Python needed): a private copy of Python named Deskhand.exe, a hidden background helper that
-# starts at sign-in and updates itself from your Deskhand server, a notification-area icon, and Start-menu shortcuts.
+# Per-user (no admin, no Python needed): a private copy of Python named Deskhand.exe, run as the Deskhand APP (its own
+# window, notification-area icon and logo; listed under Apps in Task Manager) that starts at sign-in, keeps the helper
+# running and updates itself from your Deskhand server. Plus Start-menu and desktop shortcuts.
 # (DESKHAND_HOME / DESKHAND_NO_SERVICE exist for testing only: install somewhere else and skip tasks/shortcuts.)
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"            # Windows PowerShell 5.1 is extremely slow with the download bar on
@@ -18,7 +19,7 @@ Write-Host "Setting up Deskhand on this computer..." -ForegroundColor Cyan
 if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") { throw "Deskhand supports 64-bit Intel/AMD Windows for now (this one is $($env:PROCESSOR_ARCHITECTURE))." }
 
 # 0. A reinstall must not fight the running copy: stop only Deskhand's own task and processes
-if (-not $NoService) { Stop-ScheduledTask -TaskName "DeskhandAgent" -ErrorAction SilentlyContinue; Stop-ScheduledTask -TaskName "DeskhandTray" -ErrorAction SilentlyContinue }
+if (-not $NoService) { foreach ($t in "Deskhand", "DeskhandAgent", "DeskhandTray") { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } }
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Dir, [StringComparison]::OrdinalIgnoreCase) } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Milliseconds 800
@@ -102,33 +103,34 @@ if ($NoService) {
   return
 }
 
-# 7. Start at sign-in, hidden, restarts if it dies; plus the notification-area icon
+# 7. One app: starts at sign-in in the notification area (no window until you open it), restarts if it dies
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 99 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
-$agent = New-ScheduledTaskAction -Execute $Exe -Argument "`"$(Join-Path $Dir 'launcher.py')`" `"$Dir`"" -WorkingDirectory $Dir
-Register-ScheduledTask -TaskName "DeskhandAgent" -Force -InputObject (New-ScheduledTask -Action $agent -Settings $settings -Principal $principal -Trigger $trigger) | Out-Null
-$trayAction = New-ScheduledTaskAction -Execute $Exe -Argument "`"$(Join-Path $Dir 'launcher.py')`" `"$Dir`" tray" -WorkingDirectory $Dir
-$traySettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName "DeskhandTray" -Force -InputObject (New-ScheduledTask -Action $trayAction -Settings $traySettings -Principal $principal -Trigger $trigger) | Out-Null
+$boot = "`"$(Join-Path $Dir 'boot.py')`" --root `"$Dir`" taskpilot.agent.app"
+$action = New-ScheduledTaskAction -Execute $Exe -Argument "$boot --minimized" -WorkingDirectory $Dir
+Register-ScheduledTask -TaskName "Deskhand" -Force -InputObject (New-ScheduledTask -Action $action -Settings $settings -Principal $principal -Trigger $trigger) | Out-Null
+# older installs had two separate tasks: the app replaces both
+foreach ($old in "DeskhandAgent", "DeskhandTray") { Unregister-ScheduledTask -TaskName $old -Confirm:$false -ErrorAction SilentlyContinue }
 
-# 8. Start-menu shortcuts (Ctrl+Alt+P starts Deskhand, Ctrl+Alt+O opens the app)
+# 8. Start-menu shortcuts: "Deskhand" opens the app window (Ctrl+Alt+P), and one opens the web app (Ctrl+Alt+O)
 $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Deskhand"
+Remove-Item $menu -Recurse -Force -ErrorAction SilentlyContinue                          # drop the old Start/Stop shortcuts
 New-Item -ItemType Directory -Force $menu | Out-Null
 $sh = New-Object -ComObject WScript.Shell
-function New-Link($n, $target, $a, $hotkey) {
-  $l = $sh.CreateShortcut((Join-Path $menu "$n.lnk")); $l.TargetPath = $target; $l.Arguments = $a; $l.WindowStyle = 7
-  if ($hotkey) { $l.Hotkey = $hotkey }; $l.Save()
+function New-Link($n, $target, $a, $hotkey, $icon) {
+  $l = $sh.CreateShortcut((Join-Path $menu "$n.lnk")); $l.TargetPath = $target; $l.Arguments = $a; $l.WorkingDirectory = $Dir
+  if ($icon) { $l.IconLocation = "$icon,0" }; if ($hotkey) { $l.Hotkey = $hotkey }; $l.Save()
 }
-$ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-New-Link "Deskhand - Start" $ps "-NoProfile -WindowStyle Hidden -Command Start-ScheduledTask -TaskName DeskhandAgent; Start-ScheduledTask -TaskName DeskhandTray" "Ctrl+Alt+P"
-New-Link "Deskhand - Stop" $ps "-NoProfile -WindowStyle Hidden -Command Stop-ScheduledTask -TaskName DeskhandAgent" ""
-New-Link "Deskhand - Open app" "$Server/app/" "" "Ctrl+Alt+O"
+New-Link "Deskhand" $Exe $boot "Ctrl+Alt+P" $Exe
+New-Link "Deskhand - Open in browser" "$Server/app/" "" "Ctrl+Alt+O" $Exe
+Copy-Item (Join-Path $menu "Deskhand.lnk") (Join-Path ([Environment]::GetFolderPath("Desktop")) "Deskhand.lnk") -Force   # also on the desktop
 
-Start-ScheduledTask -TaskName "DeskhandAgent"
-Start-ScheduledTask -TaskName "DeskhandTray"
+Start-ScheduledTask -TaskName "Deskhand"
+Start-Sleep -Seconds 3
+Start-Process -FilePath $Exe -ArgumentList $boot -WorkingDirectory $Dir                    # show the window once, so you see it
 Write-Host ""
 Write-Host "Done. This computer is '$($join.device_id)' and will appear in your Deskhand app." -ForegroundColor Green
-Write-Host "Look for the Deskhand icon near the clock. It starts at every sign-in and updates itself. Settings: $cfgPath"
+Write-Host "Deskhand is now an app: find it in Task Manager under Apps, and in the Start menu. Closing its window keeps it running near the clock."

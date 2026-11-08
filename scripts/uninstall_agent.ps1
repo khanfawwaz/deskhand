@@ -5,7 +5,7 @@
 param([switch] $Purge)
 $ErrorActionPreference = "SilentlyContinue"
 $dir = Join-Path $env:LOCALAPPDATA "Deskhand"
-foreach ($t in "DeskhandAgent", "DeskhandTray") {
+foreach ($t in "Deskhand", "DeskhandAgent", "DeskhandTray") {
   Stop-ScheduledTask -TaskName $t
   Unregister-ScheduledTask -TaskName $t -Confirm:$false
 }
@@ -13,6 +13,7 @@ foreach ($t in "DeskhandAgent", "DeskhandTray") {
 Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Remove-Item -Recurse -Force (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Deskhand")
+Remove-Item -Force (Join-Path ([Environment]::GetFolderPath("Desktop")) "Deskhand.lnk")
 Remove-Item -Force (Join-Path $dir "agent.token")
 if ($Purge) { Remove-Item -Recurse -Force $dir }
 Write-Host "Deskhand removed. (The computer is still listed in your app: use Settings > Your computers > Remove.)"

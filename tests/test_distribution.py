@@ -126,6 +126,15 @@ def test_a_corrupted_download_is_rejected_and_nothing_is_switched(env, tmp_path,
     assert not (apps / "current.txt").exists()
 
 
+class FakeProc:
+    """Stands in for the helper process: exits at once with `code`."""
+    def __init__(self, code): self.returncode = code
+    def poll(self): return self.returncode
+    def terminate(self): pass
+    def kill(self): pass
+    def wait(self, timeout=None): return self.returncode
+
+
 def test_launcher_rolls_back_a_version_that_keeps_crashing(tmp_path, monkeypatch):
     from taskpilot.agent import launcher
     apps = tmp_path / "apps"
@@ -135,14 +144,11 @@ def test_launcher_rolls_back_a_version_that_keeps_crashing(tmp_path, monkeypatch
     (apps / "previous.txt").write_text("good")
     runs = []
 
-    class R:
-        def __init__(self, c): self.returncode = c
-
-    def fake_run(cmd, env=None, **kw):
+    def fake_popen(cmd, env=None, **kw):
         runs.append(env["PILOT_VERSION"])
-        return R(1 if env["PILOT_VERSION"] == "bad" else 0)
-    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
-    monkeypatch.setattr(launcher.time, "sleep", lambda s: None)
+        return FakeProc(1 if env["PILOT_VERSION"] == "bad" else 0)
+    monkeypatch.setattr(launcher.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(launcher.Supervisor, "_interruptible_sleep", lambda self, s: None)
     assert launcher.main(tmp_path) == 0
     assert runs == ["bad", "bad", "bad", "good"]
     assert (apps / "current.txt").read_text() == "good" and "bad" in (apps / "bad.txt").read_text()
