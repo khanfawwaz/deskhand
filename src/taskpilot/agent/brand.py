@@ -85,13 +85,17 @@ def _k32():
     return k
 
 
-ENUMNAMEPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMODULE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
-ENUMLANGPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMODULE, ctypes.c_void_p, ctypes.c_void_p, wintypes.WORD, ctypes.c_void_p)
+def _callback_types():
+    """Windows-only callback signatures, built on demand so this module still imports (and tests run) on Linux."""
+    name_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMODULE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+    lang_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMODULE, ctypes.c_void_p, ctypes.c_void_p, wintypes.WORD, ctypes.c_void_p)
+    return name_proc, lang_proc
 
 
 def _existing(path: str, rtype: int) -> list[tuple[int, int]]:
     """(name id, language) of every resource of this type already in the file, so they can be removed first."""
     k = _k32()
+    ENUMNAMEPROC, ENUMLANGPROC = _callback_types()
     h = k.LoadLibraryExW(path, None, 0x2)                 # LOAD_LIBRARY_AS_DATAFILE
     if not h:
         return []
