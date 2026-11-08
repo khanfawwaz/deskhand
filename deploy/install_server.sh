@@ -86,7 +86,7 @@ echo "Using $($PY --version)"
 
 if [ ! -f /etc/deskhand.env ]; then
   KEY=$("$PY" -c 'import secrets;print(secrets.token_urlsafe(32))')
-  printf 'TASKPILOT_ADMIN_KEY=%s\nNVIDIA_API_KEY=\n# Sign-in by email (see README): your Gmail + an app password\nTASKPILOT_SMTP_USER=\nTASKPILOT_SMTP_PASSWORD=\nTASKPILOT_PUBLIC_URL=\n' "$KEY" > /etc/deskhand.env
+  printf 'TASKPILOT_ADMIN_KEY=%s\nNVIDIA_API_KEY=\n# Sign-in by email (see README): your Gmail + an app password\nTASKPILOT_SMTP_USER=\nTASKPILOT_SMTP_PASSWORD=\nTASKPILOT_PUBLIC_URL=\n# Two models: a big text model decides, a vision model looks (see README). Delete these 4 lines for a single model.\nTASKPILOT_TEXT_MODEL=nvidia/nemotron-3-ultra-550b-a55b\nTASKPILOT_VISION_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b\nTASKPILOT_SPLIT_MODE=describe\nTASKPILOT_ALLOW_IMAGES=1\n' "$KEY" > /etc/deskhand.env
   chmod 600 /etc/deskhand.env
   echo "Created /etc/deskhand.env - put your NVIDIA_API_KEY (and Gmail app password) in it, then: sudo systemctl restart deskhand"
 fi
