@@ -23,14 +23,35 @@ done
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${SUDO_USER:-$(whoami)}"
 cd "$REPO"
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo "Python 3.11+ is required"; exit 1; }
+# Deskhand needs Python 3.11+. Ubuntu 22.04 ships 3.10, so install 3.11 from the deadsnakes archive when needed.
+find_python() {
+  for c in python3.13 python3.12 python3.11 python3; do
+    if command -v "$c" >/dev/null && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+      echo "$c"; return 0
+    fi
+  done
+  return 1
+}
+PY=$(find_python || true)
+if [ -z "$PY" ]; then
+  echo "Python 3.11+ not found: installing python3.11 (deadsnakes)"
+  apt-get update -qq
+  apt-get install -y -qq software-properties-common
+  add-apt-repository -y ppa:deadsnakes/ppa
+  apt-get update -qq
+  apt-get install -y -qq python3.11 python3.11-venv
+  PY=python3.11
+fi
+# the venv module ships separately on Debian/Ubuntu
+"$PY" -c 'import ensurepip, venv' 2>/dev/null || apt-get install -y -qq "$(basename "$PY")-venv"
+echo "Using $($PY --version)"
 
-python3 -m venv .venv
+"$PY" -m venv .venv
 .venv/bin/pip install -q -e ".[server]"
 [ -f server_policy.json ] || cp server_policy.example.json server_policy.json     # the server-side safety rules (edit to taste)
 
 if [ ! -f /etc/deskhand.env ]; then
-  KEY=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')
+  KEY=$("$PY" -c 'import secrets;print(secrets.token_urlsafe(32))')
   printf 'TASKPILOT_ADMIN_KEY=%s\nNVIDIA_API_KEY=\n# Sign-in by email (see README): your Gmail + an app password\nTASKPILOT_SMTP_USER=\nTASKPILOT_SMTP_PASSWORD=\nTASKPILOT_PUBLIC_URL=\n' "$KEY" > /etc/deskhand.env
   chmod 600 /etc/deskhand.env
   echo "Created /etc/deskhand.env - put your NVIDIA_API_KEY (and Gmail app password) in it, then: sudo systemctl restart deskhand"
