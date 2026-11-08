@@ -1,0 +1,182 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07071D">
+  <meta name="color-scheme" content="dark light">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Deskhand</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><h1>Deskhand</h1></div>
+    <div class="top-right">
+      <span id="conn" class="conn" data-state="offline" role="status" aria-live="polite">offline</span>
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Settings" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <!-- 1. first run: sign in -->
+    <section id="pairView" hidden>
+      <div class="card hero" id="emailCard" hidden>
+        <h2>Welcome to Deskhand</h2>
+        <p class="lead">Tell your computer what to do, by voice or text, from anywhere. It does the clicking and typing for you.</p>
+        <ul class="perks">
+          <li>Works on your own computer, not in the cloud</li>
+          <li>Asks you first before anything risky</li>
+          <li>No password: we email you a sign-in link</li>
+        </ul>
+        <form id="emailForm" autocomplete="on">
+          <label>Your email
+            <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" required>
+          </label>
+          <button class="primary wide" type="submit" id="emailBtn">Email me a sign-in link</button>
+        </form>
+        <form id="verifyForm" autocomplete="off" hidden>
+          <p class="hint" id="sentNote">Check your inbox. Tap the link in the email, or type the code from it here.</p>
+          <label>Code from the email
+            <input id="vcode" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
+          </label>
+          <button class="primary wide" type="submit">Sign in</button>
+          <button class="link wide" type="button" id="resendBtn">Use a different email</button>
+        </form>
+        <p id="emailErr" class="err" role="alert"></p>
+        <button class="link" type="button" id="haveCodeBtn">I have a pairing code instead</button>
+      </div>
+      <div class="card" id="codeCard">
+        <h2>Connect this device</h2>
+        <p class="hint">Enter the code shown on a device that is already set up (Settings, then Add a phone or computer), or an invite code you were sent. A code works once.</p>
+        <form id="pairForm" autocomplete="off">
+          <label>Code
+            <input id="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
+          </label>
+          <label>Name this device
+            <input id="devName" maxlength="40" placeholder="e.g. My phone" required>
+          </label>
+          <button class="primary wide" type="submit">Connect</button>
+          <p id="pairErr" class="err" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- 2. the app -->
+    <section id="appView" hidden>
+      <div id="approval" class="approval" role="alertdialog" aria-labelledby="approvalTitle" hidden>
+        <div>
+          <strong id="approvalTitle">Deskhand needs your OK</strong>
+          <p id="approvalText"></p>
+          <p class="hint">Say "approve" or "deny", or tap a button.</p>
+        </div>
+        <div class="row">
+          <button id="denyBtn" class="danger" type="button">Deny</button>
+          <button id="approveBtn" class="primary" type="button">Approve</button>
+        </div>
+      </div>
+
+      <section id="setup" class="card hero" hidden>
+        <h2>Connect your first computer</h2>
+        <p class="lead">Deskhand works on a Windows computer that has a small helper installed. It takes about a minute.</p>
+        <ol class="how">
+          <li>Press the button to get your one-line install command.</li>
+          <li>On the Windows computer, open <b>PowerShell</b> and paste it.</li>
+          <li>Wait: the computer appears here by itself.</li>
+        </ol>
+        <button id="getCmdBtn" class="primary wide" type="button">Get my install command</button>
+        <div id="setupCmd" hidden>
+          <code id="setupCmdText" class="cmd"></code>
+          <button id="setupCopy" class="wide" type="button">Copy command</button>
+          <p class="hint waiting"><span class="pulse" aria-hidden="true"></span>Waiting for your computer to connect. The command works once, for 15 minutes.</p>
+        </div>
+        <p id="setupErr" class="err" role="alert"></p>
+      </section>
+
+      <form id="composer" class="composer card" autocomplete="off">
+        <div class="target">
+          <label for="deviceSel">Run on</label>
+          <span id="devDot" class="dot" aria-hidden="true"></span>
+          <select id="deviceSel" aria-label="Computer to control"></select>
+        </div>
+        <textarea id="goal" rows="3" maxlength="4000" placeholder="What should I do? For example: open Notepad and write a shopping list." aria-label="Command"></textarea>
+        <div id="examples" class="chips" aria-label="Examples"></div>
+        <div class="row">
+          <button id="micBtn" class="mic" type="button" aria-pressed="false" aria-label="Speak a command">
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z"/></svg>
+          </button>
+          <button id="sendBtn" class="primary grow" type="submit">Run</button>
+        </div>
+        <p id="voiceLine" class="hint" aria-live="polite"></p>
+      </form>
+
+      <section id="current" class="card" hidden aria-live="polite">
+        <div class="card-head">
+          <span id="chip" class="chip">Working</span>
+          <span id="elapsed" class="hint"></span>
+        </div>
+        <p id="curGoal" class="goal"></p>
+        <ol id="steps" class="steps"></ol>
+        <div id="resultBox" class="result" hidden>
+          <div class="card-head"><strong>Result</strong><button id="copyBtn" class="link" type="button">Copy</button></div>
+          <pre id="result"></pre>
+        </div>
+        <p id="errorLine" class="err" hidden></p>
+        <button id="stopBtn" class="danger wide" type="button" hidden>Stop this task</button>
+      </section>
+
+      <section class="card">
+        <h2>Recent</h2>
+        <ul id="history" class="history"></ul>
+        <p id="emptyHistory" class="hint">Nothing yet. Tasks you run will show up here so you can look back at them.</p>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="menu">
+    <form method="dialog" class="menu">
+      <h2>Settings</h2>
+
+      <h3 class="sec">Your computers</h3>
+      <ul id="computers" class="list"></ul>
+      <button id="addLaptopBtn" type="button" class="wide">Add a Windows computer</button>
+      <div id="addLaptop" hidden>
+        <p class="hint">On that computer, open PowerShell and paste this line. It works once, for 15 minutes.</p>
+        <code id="addCmd" class="cmd"></code>
+        <button id="copyCmd" type="button" class="wide">Copy</button>
+      </div>
+
+      <h3 class="sec">Phones and computers you control from</h3>
+      <p class="hint" id="wsLine"></p>
+      <ul id="members" class="list"></ul>
+      <button id="addControllerBtn" type="button" class="wide">Add another phone or computer</button>
+      <div id="addController" hidden>
+        <p class="hint">Open Deskhand on the new device and enter this code. It works once, for 10 minutes.</p>
+        <code id="ctrlCode" class="cmd big"></code>
+      </div>
+
+      <h3 class="sec">Preferences</h3>
+      <label class="check"><input type="checkbox" id="optAuto"> Send voice commands automatically (2 s to cancel)</label>
+      <label class="check"><input type="checkbox" id="optSpeak"> Read results aloud</label>
+      <label class="check"><input type="checkbox" id="optNotify"> Alert me when Deskhand needs approval</label>
+      <button id="installBtn" type="button" class="wide" hidden>Install the app on this device</button>
+      <p id="iosHint" class="hint" hidden>On iPhone/iPad: tap Share, then "Add to Home Screen".</p>
+
+      <h3 class="sec">Safety</h3>
+      <button id="estopBtn" type="button" class="danger wide">Emergency stop (all tasks)</button>
+      <p class="hint" id="whoami"></p>
+      <button id="unpairBtn" type="button" class="wide">Sign out of this device</button>
+      <button class="primary wide" value="close">Done</button>
+    </form>
+  </dialog>
+
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

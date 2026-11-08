@@ -1,0 +1,17 @@
+# secrets and per-machine state: never commit these
+.env
+*.env
+agent.json
+agent.token
+server_policy.json
+*.db
+*.sqlite*
+# environments, caches, generated output
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+evals_out/
+bench_results/
+node_modules/

@@ -1,0 +1,22 @@
+# /etc/systemd/system/taskpilot-server.service  (edit User and paths)
+# /etc/taskpilot.env holds secrets, chmod 600:
+#   TASKPILOT_ADMIN_KEY=...   NVIDIA_API_KEY=...   TASKPILOT_DB=mongodb://...
+[Unit]
+Description=TaskPilot server
+After=network-online.target docker.service tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=taskpilot
+WorkingDirectory=/opt/taskpilot
+EnvironmentFile=/etc/taskpilot.env
+# Bind to the Tailscale address only, e.g. 100.x.y.z
+ExecStart=/opt/taskpilot/.venv/bin/taskpilot-server --host 100.x.y.z --port 8765 \
+  --policy /opt/taskpilot/server_policy.json --provider openai --model MODEL_ID
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/taskpilot
+
+[Install]
+WantedBy=multi-user.target

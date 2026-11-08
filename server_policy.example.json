@@ -1,0 +1,33 @@
+{
+  "approved_apps": {
+    "notepad": "C:\\Windows\\System32\\notepad.exe",
+    "calc": "C:\\Windows\\System32\\calc.exe"
+  },
+  "allowed_dirs": [
+    "C:\\Users\\ASUS\\projects"
+  ],
+  "command_rules": [
+    {
+      "executable": "git",
+      "allowed_subcommands": [
+        "status",
+        "log",
+        "diff",
+        "branch"
+      ]
+    },
+    {
+      "executable": "whoami"
+    },
+    {
+      "executable": "python",
+      "confirm": true
+    }
+  ],
+  "confirm_tools": [],
+  "max_type_len": 500,
+  "ui_allowed_windows": [
+    "Calculator"
+  ],
+  "restrict_input_to_approved": true
+}

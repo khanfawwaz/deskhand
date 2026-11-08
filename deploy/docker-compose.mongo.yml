@@ -1,0 +1,23 @@
+# MongoDB for TaskPilot on the Linux server.
+#   cp deploy/mongo.env.example deploy/mongo.env   (edit the password)
+#   docker compose -f deploy/docker-compose.mongo.yml --env-file deploy/mongo.env up -d
+# Then:  export TASKPILOT_DB='mongodb://taskpilot:<password>@127.0.0.1:27017/?authSource=admin'
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    # Cache cap matters on a 12 GB box: the default is ~50% of RAM.
+    command: ["--wiredTigerCacheSizeGB", "0.5", "--auth", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27017:27017"      # localhost only; never publish to the network
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-taskpilot}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?set MONGO_PASSWORD in deploy/mongo.env}
+    volumes:
+      - taskpilot-mongo:/data/db
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+volumes:
+  taskpilot-mongo:

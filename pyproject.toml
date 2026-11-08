@@ -1,0 +1,35 @@
+[project]
+name = "taskpilot"
+version = "0.1.0"
+description = "TaskPilot Layer 1 - local AI desktop automation engine"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2", "httpx", "websockets"]
+
+[project.optional-dependencies]
+bench = ["pillow"]
+mongo = ["pymongo"]
+server = ["fastapi", "uvicorn[standard]"]
+agent = ["psutil", "mss", "pyautogui", "pillow", "uiautomation"]
+dev = ["pytest", "pytest-asyncio", "mongomock", "pymongo"]
+
+[project.scripts]
+taskpilot = "taskpilot.cli:main"
+taskpilot-agent = "taskpilot.agent.main:main"
+taskpilot-server = "taskpilot.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+taskpilot = ["web/*", "web/icons/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning"]
+testpaths = ["tests"]
+pythonpath = ["src"]
