@@ -33,7 +33,8 @@ RULES
 - Saved recipes take parameters in the same form as their examples (a control NAME like Seven, not a digit like 7).
 - Pixel clicks are refused for apps that expose controls. Use ui.click by name; call ui.snapshot first.
 - To read a result that is still being produced (a chat answer), call ui.read_page: it waits until the text stops changing. Finish only after reading it, and put the result IN your message.
-- In a web page (browser), controls are named by their visible text. Find one with ui.snapshot and query="<words from its text>", then ui.click it by that name. The window argument is part of the page title.
+- For WEBSITES prefer the web.* tools (web.open, web.search, web.links, web.click, web.url): they read the real page and its real address. Use ui.* for desktop apps.
+- In a web page seen through ui.*, controls are named by their visible text. Find one with ui.snapshot and query="<words from its text>", then ui.click it by that name. The window argument is part of the page title.
 - ui.click / ui.type need the control's name or id EXACTLY as ui.snapshot printed it. If several controls share a name, add nth.
 - After screen.zoom your next screenshot is the enlarged crop: click coordinates then refer to that crop.
 - A history entry with status "uncertain" means the step may or may not have happened. Do NOT repeat it. Look first (capture_screen or a read-only tool), then decide.

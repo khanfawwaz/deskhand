@@ -362,6 +362,18 @@ async def _vscode_open(ctx: ToolContext, a: PathArgs) -> dict:
 async def _current_url(ctx: ToolContext, a: "Empty") -> dict:
     """The address of the page in the foreground browser window (only for an approved window)."""
     from ..agent.gate import BROWSERS, window_allowed
+    web = getattr(ctx.backend, "web", lambda: None)()
+    if web is not None:                                         # the browser bridge knows the exact address
+        try:
+            st = await asyncio.to_thread(web.state, False)
+            if str(st.get("address", "")).startswith(("http://", "https://")):
+                from .web_tools import _gate_page
+                _gate_page(ctx.policy, st["address"])
+                return {"url": st["address"][:300], "window": st.get("title", "")}
+        except NeedsAccess:
+            raise
+        except Exception:
+            pass                                                # no bridge browser running: read the window instead
     w = await asyncio.to_thread(ctx.backend.active_window)
     if not w or (w.process or "").lower() not in BROWSERS:      # focus may have drifted: look for an approved browser window
         w = None
@@ -384,6 +396,8 @@ async def _current_url(ctx: ToolContext, a: "Empty") -> dict:
 def register_builtin(r: ToolRegistry) -> None:
     from .ui_tools import register_ui_tools
     register_ui_tools(r)
+    from .web_tools import register_web_tools
+    register_web_tools(r)
     R = r.register
     R(Tool("files.read", "Read a text file inside an allowed folder.", ReadArgs, _files_read,
            _check_path, lambda a, d: (True, f"read {d.get('bytes_read')} bytes"),

@@ -11,19 +11,15 @@ import re
 NORMAL = ("Open pages with browser.open_url (the normal browser; never a private window). ")
 
 PLAYBOOKS: list[dict] = [
-    {"name": "YouTube", "keywords": ("youtube", "you tube"), "text": NORMAL + (
-        "Go straight to a channel's Videos tab: browser.open_url https://www.youtube.com/@<handle>/videos "
-        "(it lists uploads NEWEST FIRST). If unsure of the handle, search channels: "
-        "https://www.youtube.com/results?search_query=<name>+official+channel&sp=EgIQAg%253D%253D. "
-        "To play the newest upload: on the /videos page ui.click the FIRST video link (its name is the title; use "
-        "ui.snapshot with a short query of the title words to find it). Do NOT pick a video from the channel home "
-        "page, trailers or featured rows. A video starts by itself; the 'k' key toggles play/pause. SUCCESS: once the "
-        "video page is open (the window title is the video's title and the player is showing), finish with outcome "
-        "done and cite that title as evidence. Do not keep clicking or reopening pages. If you do not know a video's title, "
-        "list the page's CONTENT links: ui.snapshot role=Hyperlink min_chars=25 (video links are named like '<title> <length>', "
-        "e.g. 'Prop Hunters is Hilarious 30 minutes'; short names are menus). On a channel's /videos tab they come newest "
-        "first. Click the first one by its full name. For a video you can only describe (a topic, not 'the latest'), search beats browsing a channel: open https://www.youtube.com/results?search_query=<channel>+<topic> and pick the matching result. The tab title and notification count change while a page loads, so "
-        "refer to a window by a stable part of its title. A screenshot (capture_screen) also shows the grid.")},
+    {"name": "YouTube", "keywords": ("youtube", "you tube"), "text": (
+        "Use the web tools (they read the real page and its real address). A channel's Videos tab lists uploads NEWEST FIRST: "
+        "web.open https://www.youtube.com/@<handle>/videos, then web.links (min_chars=20 shows video titles in page order) "
+        "and web.click the first title for 'the latest'. For a video you can only describe (a topic, not 'the latest'), "
+        "search beats browsing a channel: web.open https://www.youtube.com/results?search_query=<channel>+<topic>, web.links, "
+        "web.click the matching result (skip ads). If unsure of a handle, search for the channel the same way. SUCCESS: "
+        "web.url shows an address with /watch (or /shorts/): finish with outcome done and cite the video title. "
+        "Without the web tools: browser.open_url (the normal browser; never a private window), then ui.snapshot role=Hyperlink min_chars=25 lists the newest videos; take "
+        "a screenshot (capture_screen) if the list looks wrong.")},
     {"name": "News research", "keywords": ("news", "research"), "text": NORMAL + (
         "For today's news use https://news.google.com/search?q=<words>+when:1d (for AI: q=artificial+intelligence+"
         "OR+AI+when:1d). Read the headlines straight from that results page: ui.snapshot with name_chars=200 "

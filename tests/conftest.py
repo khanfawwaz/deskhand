@@ -72,6 +72,46 @@ class FakeUI:
             self.acc, self.op, self.cur, self.fresh = None, None, "0", True
 
 
+class FakeWeb:
+    """A tiny browser: pages are {address: {"title", "links": [(text, href)]}}; search jumps to results."""
+
+    def __init__(self):
+        self.pages = {}
+        self.address = "about:blank"
+        self.log = []
+
+    def _page(self):
+        return self.pages.get(self.address, {"title": "", "links": []})
+
+    def open(self, url, wait_s=20.0):
+        self.log.append(("open", url))
+        self.address = url
+        return {"address": url, "title": self._page()["title"], "loaded": url in self.pages}
+
+    def state(self, launch=True):
+        return {"address": self.address, "title": self._page()["title"]}
+
+    def links(self, min_chars, limit, skip):
+        ls = [{"text": t, "href": h, "y": i} for i, (t, h) in enumerate(self._page()["links"]) if len(t) >= min_chars]
+        return {**self.state(), "total": len(ls), "links": ls[skip:skip + limit]}
+
+    def click(self, text):
+        self.log.append(("click", text))
+        for t, h in self._page()["links"]:
+            if text.lower() in t.lower():
+                self.address = h
+                return {"clicked": t, "href": h, **self.state(), "moved": True}
+        raise RuntimeError(f"nothing clickable on the page matches {text!r}")
+
+    def search(self, query):
+        self.log.append(("search", query))
+        self.address = "https://www.youtube.com/results?search_query=" + query.replace(" ", "+")
+        return {"searched": query, **self.state(), "moved": True}
+
+    def text(self, limit):
+        return {**self.state(), "text": " ".join(t for t, _ in self._page()["links"])[:limit]}
+
+
 class FakeBackend(Backend):
     def __init__(self):
         self.calls: list[tuple] = []
@@ -84,6 +124,7 @@ class FakeBackend(Backend):
         self.ui = FakeUI()
         self.zooms: list[tuple] = []
         self.hosts: dict[str, str] = {}             # window title -> host shown in its address bar
+        self.webpage = FakeWeb()                    # the browser bridge double (web.* tools)
         self.urls: dict[str, str] = {}              # window title -> the full address shown (when a test needs the path)
         self.apps = {"spotify": r"shell:AppsFolder\SpotifyAB.SpotifyMusic!Spotify"}      # what resolve_app can find
         self.active_process = ""                    # process of the foreground window (real Windows always has one)
@@ -148,6 +189,9 @@ class FakeBackend(Backend):
             return self.hosts[title]
         from urllib.parse import urlparse
         return urlparse(self.urls[title]).hostname if title in self.urls else None
+
+    def web(self):
+        return self.webpage
 
     def window_url(self, title):
         if title in self.urls:

@@ -48,6 +48,10 @@ class Backend(ABC):
     def open_url(self, url: str) -> None:
         raise NotImplementedError
 
+    def web(self):
+        """The browser bridge (web.* tools), or None when this computer has none."""
+        return None
+
     def launch_cli(self, exe: str, args: list[str]) -> int | None:
         raise NotImplementedError
 
@@ -397,6 +401,12 @@ class WindowsBackend(Backend):
                "Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.Clipboard]::Clear()")
         subprocess.run(["powershell", "-NoProfile", "-Command", cmd], input=text, text=True,
                        timeout=15, check=True)
+
+    def web(self):
+        from .cdp import CdpWeb
+        if getattr(self, "_web", None) is None:
+            self._web = CdpWeb()
+        return self._web
 
     def open_url(self, url: str) -> None:
         os.startfile(url)  # type: ignore[attr-defined]   # default handler; url pre-validated by policy
