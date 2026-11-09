@@ -101,12 +101,13 @@ async def test_the_same_page_is_never_opened_twice_in_a_task(make_env):
     url = "https://www.youtube.com/@BattleBots/videos"
     e = make_env([act("browser.open_url", url=url), act("browser.open_url", url=url + "/"),
                   act("browser.open_url", url=url.upper()), act("browser.open_url", url=url),
-                  act("browser.open_url", url=url), {"outcome": {"outcome": "cannot_proceed", "message": "x"}}],
+                  act("browser.open_url", url=url), act("browser.open_url", url=url),
+                  {"outcome": {"outcome": "cannot_proceed", "message": "x"}}],
                  screenshot_mode="auto")
     tid, t = await e.run("g")
-    assert [c for c in e.backend.calls if c[0] == "url"] == [("url", url)]                       # exactly one window
+    assert [c for c in e.backend.calls if c[0] == "url"] == [("url", url), ("url", url + "/")]   # the page + ONE retry, never more
     assert "kept re-opening the same page" in t["error"]
-    assert any("already opened" in n for n in e.model.contexts[1].notes)
+    assert any("already tried opening this page twice" in n for n in e.model.contexts[-1].notes)
 
 
 async def test_clicks_on_a_cropped_window_screenshot_map_to_real_display_positions(make_env):

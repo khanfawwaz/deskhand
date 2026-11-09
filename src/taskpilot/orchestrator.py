@@ -25,6 +25,7 @@ from .protocol import (
     AppToolCall, CaptureScreen, GetProcessStatus, GrantAccess, Proposal, Screenshot, action_label,
 )
 from .states import TERMINAL, TaskState
+from .playbooks import final_address_for
 from .store import Store
 from . import skills as skillbook
 from .tools import get_registry
@@ -54,7 +55,7 @@ class Config:
     # the app has been probed with ui.snapshot, and stay refused for apps that expose controls (use ui.click).
     prefer_ui: bool = True
     max_page_opens: int = 5          # hard cap on browser.open_* per task: a confused model must not spam windows
-    max_idle_steps: int = 10         # this many steps in a row that only look around (or are refused) = stalled
+    max_idle_steps: int = 16         # this many steps in a row that only look around (or are refused) = stalled
     ground_evidence_min: float = 0.4   # share of a "done" claim's distinctive terms that must appear in what was observed
     ground_message_min: float = 0.35   # same, for the answer in the final message of read-the-result tasks
     learn: bool = True               # keep a non-sensitive summary of verified successes as hints for similar goals
@@ -209,7 +210,8 @@ class Orchestrator:
         pending_shot: Screenshot | None = None     # a zoomed crop the model asked for, shown next step
         recorded: list[dict] = []                  # replayable steps of this run (for a draft recipe)
         ui_status: dict[str, str] = {}             # window title -> "good" | "poor" | "blocked" (from ui.snapshot)
-        opened_urls: set[str] = set()              # pages already opened in this task (never open one twice)
+        opened_urls: dict[str, str] = {}           # pages opened in this task -> the window title once it was confirmed ('' = not yet)
+        open_counts: dict[str, int] = {}           # how many times each page was opened (one retry is allowed, never more)
         observed: list[str] = []                   # everything Pilot actually read: the ground truth for "done" claims
         attempts: dict[str, list[bool]] = {}       # exact action -> outcomes, to stop repeating what does not work
         exp_hints = self._experience_hints(task["goal"], task.get("workspace"))
@@ -220,11 +222,15 @@ class Orchestrator:
             exp_hints = (exp_hints + "\n" if exp_hints else "") + skillbook.render(sk)
         skipped = 0
         questions = 0
+        nudged = 0
         access_state: dict[tuple, str] = {}        # (kind, target) -> "granted" | "no": never ask twice in one task
 
         while True:
             self._check(tid, deadline)
             idle = self._idle_streak(history)
+            if idle in (4, 8, 12) and idle != nudged:
+                nudged = idle                                   # a nudge, not a rule: suggest other ways to look
+                notes.append(self._explore_hint(idle, history))
             if idle >= self.cfg.max_idle_steps:
                 raise _Stop(TaskState.FAILED, f"no progress: the last {idle} steps only looked around or were refused")
             # ---- observe (only when a screenshot is useful)
@@ -284,6 +290,8 @@ class Orchestrator:
                 o = proposal.outcome
                 if o.outcome == "done":
                     ok, why, detail = self._completion_gate(history, o.evidence, o.message, task["goal"], observed)
+                    if ok and (bad := await self._final_address_problem(tid, dev, task["goal"])):
+                        ok, why, detail = False, bad, "address check"
                     if not ok:
                         seq += 1                               # a rejected claim leaves an audit row (with its scores)
                         self.store.record_action(uuid.uuid4().hex[:12], tid, seq, "done", {}, "denied",
@@ -353,17 +361,21 @@ class Orchestrator:
 
             if isinstance(action, AppToolCall) and action.name in ("browser.open_url", "browser.open_private"):
                 url_key = str(action.args.get("url", "")).strip().rstrip("/").lower()
-                if url_key in opened_urls:
-                    invalid += 1
-                    msg = ("you already opened this page in this task; bring its window forward with windows.focus "
-                           "(a word from its title), wait for it to load, or use ui.snapshot. Do not open it again")
+                if url_key in opened_urls and (opened_urls[url_key] or open_counts.get(url_key, 0) >= 2):
+                    invalid += 1                                         # a page that IS open, or one already retried once
+                    msg = ((f"that page is already open as the window '{opened_urls[url_key]}': use that window name with "
+                            "ui.snapshot / ui.click, or windows.focus to bring it forward. Do not open it again")
+                           if opened_urls[url_key] else
+                           "you already tried opening this page twice: find its window (windows.list, windows.focus) "
+                           "or take a screenshot instead of opening it again")
                     notes.append(f"rejected {label}: {msg}")
                     self.store.record_action(action_id, tid, seq, label, params, "denied", msg, m_ms)
                     history.append({"seq": seq, "tool": label, "status": "denied", "note": msg})
                     if invalid >= self.cfg.max_invalid_proposals:
                         raise _Stop(TaskState.FAILED, f"kept re-opening the same page: {msg}")
                     continue
-                opened_urls.add(url_key)
+                opened_urls.setdefault(url_key, "")
+                open_counts[url_key] = open_counts.get(url_key, 0) + 1
                 if len(opened_urls) > self.cfg.max_page_opens:
                     raise _Stop(TaskState.FAILED, f"opened more than {self.cfg.max_page_opens} different pages: stopping")
 
@@ -464,6 +476,9 @@ class Orchestrator:
             entry = await self._verify(tid, dev, action_id, action, result, uncertain, seq)
             history.append(entry)
             self._harvest(observed, entry)
+            if isinstance(action, AppToolCall) and action.name in ("browser.open_url", "browser.open_private") \
+                    and result is not None and result.ok and (result.data or {}).get("window"):
+                opened_urls[str(action.args.get("url", "")).strip().rstrip("/").lower()] = str(result.data["window"])
             if entry.get("status") == "ok" and skill_map:
                 opened = skillbook.subject_of_call(label, params.get("args", params) if isinstance(params, dict) else {})
                 sid = f"{opened[0]}:{opened[1]}" if opened else ""
@@ -504,6 +519,52 @@ class Orchestrator:
             return True
         t = get_registry().get(label)
         return bool(t and t.readonly)
+
+    async def _final_address_problem(self, tid: str, dev: str, goal: str) -> str:
+        """Independent of the model: for goals that must END on a particular kind of page (play a YouTube video), read the
+        browser's real address bar. Returns why 'done' is not believed, or ''."""
+        need = final_address_for(goal)
+        conn = self.hub.get(dev)
+        if not need or conn is None:
+            return ""
+        url = ""
+        for attempt in range(2):                                    # the address bar can lag a click: look twice
+            try:
+                res = await conn.execute(ActionRequest(action_id=uuid.uuid4().hex[:12], task_id=tid,
+                                                       action=AppToolCall(name="browser.current_url", args={})), self.cfg.action_timeout_s)
+            except (DeviceUnavailable, ActionTimeout):
+                return ""
+            url = (res.data or {}).get("url", "") if res.ok else ""
+            if url and any(n in url for n in need):
+                return ""
+            if attempt == 0 and self.cfg.settle_delay_s > 0:
+                await asyncio.sleep(1.5)
+        if not url:
+            return ""                                               # cannot read it (not a browser...): do not block
+        if any(n in url for n in need):
+            return ""
+        return (f"the browser's address bar shows {url[:100]!r}, which is not a video page (it should contain "
+                f"{' or '.join(need)}). Click a video so it opens and plays, then finish")
+
+    @staticmethod
+    def _explore_hint(idle: int, history: list[dict]) -> str:
+        """You have been looking around for a while without acting. Offer other ways to see, do not forbid anything."""
+        snaps = sum(1 for h in history[-idle:] if str(h.get("tool")) == "ui.snapshot")
+        shots = sum(1 for h in history[-idle:] if str(h.get("tool")) in ("capture_screen", "screen.zoom"))
+        tips = []
+        if snaps >= 2 and shots == 0:
+            tips.append("take a screenshot (capture_screen) and read the page from the picture")
+        if snaps >= 2:
+            tips.append("list the page's content in order: ui.snapshot with role=Hyperlink min_chars=25 (long names are "
+                        "content such as video titles or headlines; add skip=N to go further down), because the item you want "
+                        "may be past the menus")
+        if snaps >= 2:
+            tips.append("if what you want is not in the list, SEARCH for it instead of browsing: ui.type the words into the "
+                        "site's Search box and press Enter, or open the site's search address "
+                        "(e.g. https://www.youtube.com/results?search_query=channel+topic)")
+        tips.append("scroll the page, or try a different route (another page, keyboard)")
+        return (f"You have only looked around for {idle} steps. Do something different next: " + "; or ".join(tips) +
+                ". If you can already tell which item to pick, click it now.")
 
     def _idle_streak(self, history: list[dict]) -> int:
         n = 0

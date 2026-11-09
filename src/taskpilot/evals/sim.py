@@ -20,6 +20,7 @@ class Page:
     process: str = "chrome.exe"
     text: str = ""
     elements: list[dict] = field(default_factory=list)
+    url: str = ""
 
 
 def el(role: str, name: str, id_: str = "", *, value=None, state=(), goto: str | None = None,
@@ -55,6 +56,7 @@ class SimBackend(Backend):
         key = max((k for k in self.pages if url.lower().startswith(k.lower())), key=len, default=None)   # handles are case-insensitive
         page = self.pages[key] if key else Page(title="This site can't be reached - Google Chrome",
                                                 text="ERR_NAME_NOT_RESOLVED")
+        page.url = url                                       # the address bar shows what was asked for
         # a browser reuses its window: replace the page of the current browser window
         self.windows = [(p, pid) for p, pid in self.windows if p.process != "chrome.exe"]
         self._show(page)
@@ -116,6 +118,10 @@ class SimBackend(Backend):
         p = next((p for p, _ in self.windows if title.lower() in p.title.lower()), None)
         return p.host if p and p.host else None
 
+    def window_url(self, title):
+        p = next((p for p, _ in self.windows if title.lower() in p.title.lower()), None)
+        return (p.url or f"https://{p.host}/") if p and p.host else None
+
     def open_private(self, url): raise PermissionError("private windows are not available in the simulation")
 
     # ---- UI automation
@@ -136,10 +142,14 @@ class SimBackend(Backend):
             parts.append(f"#{nth}")
         return " ".join(parts + [f"[{s}]" for s in e["state"]])
 
-    def ui_snapshot(self, win, max_elements, query, name_chars=90):
+    def ui_snapshot(self, win, max_elements, query, name_chars=90, role="", skip=0, min_chars=0):
         page = self._page(win)
         els = [e for e in (page.elements if page else []) if query.lower() in (e["name"] + e["id"]).lower()]
-        shown = els[:max_elements]
+        if role:
+            els = [e for e in els if e["role"].lower() == {"link": "hyperlink"}.get(role.lower(), role.lower())]
+        if min_chars:
+            els = [e for e in els if len(e["name"]) >= min_chars]
+        shown = els[skip:skip + max_elements]
         return {"tree": "\n".join(self._line(e) for e in shown), "count": len(els), "shown": len(shown),
                 "truncated": len(els) > len(shown), "window": {"title": win["title"], "process": win["process"]},
                 "hint": ""}

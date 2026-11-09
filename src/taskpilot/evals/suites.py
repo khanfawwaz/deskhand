@@ -11,6 +11,9 @@ from .spec import TaskSpec
 NEWEST_BATTLEBOTS = [("v3", "Season finale: Tombstone vs Witch Doctor"), ("v2", "Bracket reveal"), ("v1", "Old fight")]
 
 
+_LAST_NEWEST_ID = [""]            # the video id behind the last newest-title lookup (titles can be A/B tested; ids cannot)
+
+
 def _fetch_newest_title(channel_url: str) -> tuple[bool | None, str, str]:
     """Public truth, outside Pilot: the title of the newest upload on a channel's /videos page.
     The first video id on the page is the newest; its title comes from YouTube's public oEmbed endpoint."""
@@ -21,10 +24,49 @@ def _fetch_newest_title(channel_url: str) -> tuple[bool | None, str, str]:
         m = re.search(r'"contentId":"([\w-]{11})","contentType":"LOCKUP_CONTENT_TYPE_VIDEO"', html) or             re.search(r'"videoRenderer":\{"videoId":"([\w-]{11})"', html)
         if not m:
             return None, "", "public page had no recognisable newest video"
+        _LAST_NEWEST_ID[0] = m.group(1)
         o = f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={m.group(1)}"
         return True, json.loads(urllib.request.urlopen(urllib.request.Request(o, headers=hdr), timeout=20).read())["title"], ""
     except Exception as e:
         return None, "", f"could not fetch the public channel page: {type(e).__name__}"
+
+
+_YT_HDR = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en", "Cookie": "CONSENT=YES+1; SOCS=CAI"}
+
+
+def _yt_get(url: str) -> str:
+    return urllib.request.urlopen(urllib.request.Request(url, headers=_YT_HDR), timeout=20).read().decode("utf-8", "replace")
+
+
+def _yt_title(vid: str) -> tuple[str, str]:
+    import json
+    o = json.loads(_yt_get(f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={vid}"))
+    return o["author_name"], o["title"]
+
+
+def _search_result_by(query: str, author_part: str) -> tuple[bool | None, str, str]:
+    """Public truth: the first YouTube search result for `query` whose channel contains `author_part`."""
+    import urllib.parse
+    try:
+        html = _yt_get("https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query}))
+        for vid in list(dict.fromkeys(re.findall(r'"videoId":"([\w-]{11})"', html)))[:8]:
+            author, title = _yt_title(vid)
+            if author_part.lower() in author.lower():
+                return True, title, ""
+        return None, "", "no matching result on the public search page"
+    except Exception as e:
+        return None, "", f"could not fetch the public search page: {type(e).__name__}"
+
+
+def search_result_playing(query: str, author_part: str) -> V.Verifier:
+    async def fn(c):
+        ok, title, why = _search_result_by(query, author_part)
+        if ok is None:
+            return None, why
+        wins = [w["title"] for w in await V._approved_windows(c)]
+        hit = [w for w in wins if title.lower()[:30] in w.lower()]
+        return bool(hit), f"expected {title[:60]!r}; window: {hit[0][:60] if hit else 'none matches'}"
+    return V.external(f"playing the {author_part} video for '{query}' (checked against YouTube search)", fn)
 
 
 def newest_video_matches(channel_url: str) -> V.Verifier:
@@ -35,6 +77,15 @@ def newest_video_matches(channel_url: str) -> V.Verifier:
         t = title.lower()[:40]
         wins = [w["title"] for w in await V._approved_windows(c)]      # only approved windows are ever read
         hit = [w for w in wins if t and t in w.lower()]
+        if not hit and _LAST_NEWEST_ID[0]:          # YouTube may show a different title variant: the video id is the truth
+            for w in await V._approved_windows(c):
+                try:
+                    u = c.backend.window_url(w["title"]) or ""
+                except Exception:
+                    u = ""
+                if _LAST_NEWEST_ID[0] in u:
+                    hit = [w["title"]]
+                    break
         return bool(hit), f"newest public title {title[:50]!r}; matching window: {hit[0][:60] if hit else 'none'}"
     return V.external("playing the channel's NEWEST video (checked against the public page)", fn)
 
@@ -100,6 +151,14 @@ def live_suite() -> list[TaskSpec]:
                                                                       "result is about AI news"),
                   V.used("ui.read_page", "ui.snapshot", "ui.read"), V.max_steps(16), V.grounded()],
                  windows=["Google News"], max_actions=26, timeout_s=300, tags=frozenset({"live", "network", "gui"})),
+        TaskSpec("live.youtube_ssundeeplus", "Can you open youtube and play the latest video from Ssundeeplus", "web",
+                 [V.completed(), newest_video_matches("https://www.youtube.com/@SSundeePlus/videos"), V.max_steps(25), V.grounded()],
+                 windows=["YouTube", "SSundee"], hosts=["youtube.com"], max_actions=40, timeout_s=420,
+                 tags=frozenset({"live", "network", "gui"})),
+        TaskSpec("live.networkchuck_paperclip", "Open youtube and play the video from NetworkChuck where he talks about the paperclip",
+                 "web", [V.completed(), search_result_playing("NetworkChuck paperclip", "NetworkChuck"), V.max_steps(25), V.grounded()],
+                 windows=["YouTube", "Paperclip", "NetworkChuck"], hosts=["youtube.com"], max_actions=40, timeout_s=420,
+                 tags=frozenset({"live", "network", "gui"})),
         chat("chatgpt", "chatgpt.com", "ChatGPT"),
         chat("claude", "claude.ai", "Claude"),
     ]

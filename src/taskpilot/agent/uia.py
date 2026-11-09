@@ -12,6 +12,8 @@ from typing import Any
 
 import psutil
 
+from ..titles import title_has
+
 MAX_WALK = 2500          # hard cap on nodes visited per call
 MAX_DEPTH = 40       # web pages nest very deeply: Chrome page content sits at depth 20-30
 INTERACTIVE = {"Button", "Edit", "CheckBox", "RadioButton", "ComboBox", "ListItem", "MenuItem", "TabItem",
@@ -66,10 +68,9 @@ def find_window(title: str) -> dict | None:
             fg = auto.GetForegroundControl()
             top = fg.GetTopLevelControl() if fg else None
             return _win_info(top) if top else None
-        want = title.lower()
         best = None
         for w in auto.GetRootControl().GetChildren():
-            if want in (w.Name or "").lower():
+            if title_has(w.Name or "", title):
                 if not w.IsOffscreen:
                     return _win_info(w)
                 best = best or w
@@ -186,8 +187,14 @@ def _inside(el: dict, box) -> bool:
         and (r[2] - r[0]) > 0
 
 
+def _role_matches(want: str, have: str) -> bool:
+    w = want.strip().lower().replace(" ", "")
+    h = have.lower()
+    return w == h or ROLE_ALIASES.get(w, "").lower() == h
+
+
 def snapshot(win: dict, max_elements: int = 80, query: str = "", include_offscreen: bool = False,
-             name_len: int = 90) -> dict:
+             name_len: int = 90, role: str = "", skip: int = 0, min_chars: int = 0) -> dict:
     with _Com():
         root = _resolve(win)
         els = _walk(root, include_offscreen)
@@ -195,6 +202,10 @@ def snapshot(win: dict, max_elements: int = 80, query: str = "", include_offscre
         useful = [e for e in els if not _is_glyph(e["name"]) and (e["name"] or e["id"] or e["role"] in INTERACTIVE)]
         if q:
             useful = [e for e in useful if q in e["name"].lower() or q in e["id"].lower()]
+        if role:
+            useful = [e for e in useful if _role_matches(role, e["role"])]
+        if min_chars:
+            useful = [e for e in useful if len(e["name"]) >= min_chars]
         # Browsers: the web PAGE is what matters, not the toolbar. Rank controls inside the biggest Document first.
         doc = _biggest_document(els)
         in_page = (lambda e: _inside(e, doc)) if doc else (lambda e: False)
@@ -203,7 +214,7 @@ def snapshot(win: dict, max_elements: int = 80, query: str = "", include_offscre
         ranked = ([e for e in useful if in_page(e) and inter(e)] + [e for e in useful if in_page(e) and not inter(e)]
                   + [e for e in useful if not in_page(e) and inter(e)]
                   + [e for e in useful if not in_page(e) and not inter(e)])
-        shown = ranked[:max_elements]
+        shown = ranked[skip:skip + max_elements]
         seen: dict[tuple, int] = {}
         counts: dict[tuple, int] = {}
         for e in useful:
@@ -220,7 +231,9 @@ def snapshot(win: dict, max_elements: int = 80, query: str = "", include_offscre
                 "window": {"title": win["title"], "process": win["process"]},
                 "rect": [r.left, r.top, r.right, r.bottom] if r else None,
                 "hint": ("few controls are exposed by this app; use capture_screen / screen.zoom and click"
-                         if len(useful) <= 3 else "")}
+                         if len(useful) <= 3 else
+                         (f"showing {skip + 1}-{skip + len(shown)} of {len(useful)}; pass skip={skip + len(shown)} for the next ones, "
+                          "or role=Hyperlink / min_chars=25 (long names = content, not menu labels) / a query to narrow it" if len(useful) > skip + len(shown) else ""))}
 
 
 def _norm_name(s: str) -> str:

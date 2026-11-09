@@ -127,6 +127,7 @@ class Policy:
     # to the approved foreground window (and refused for any other), and window lists/titles are filtered.
     cloud_safe: bool = False
     allow_private_windows: bool = False      # browser.open_private is refused unless explicitly enabled
+    page_wait_s: float = 8.0                 # browser.open_url waits up to this long for the page's window to appear
     # When on, opening a website that was never approved is a request the USER answers (allow once / always / no),
     # not a silent failure. The laptop's helper turns this on; the user's answer is the only way a site gets added.
     require_site_approval: bool = False
@@ -155,6 +156,7 @@ class Policy:
             restrict_input_to_approved=bool(d.get("restrict_input_to_approved", False)),
             cloud_safe=bool(d.get("cloud_safe", False)),
             allow_private_windows=bool(d.get("allow_private_windows", False)),
+            page_wait_s=float(d.get("page_wait_s", 8.0)),
             require_site_approval=bool(d.get("require_site_approval", False)),
             deny_hosts=[h.lower() for h in d.get("deny_hosts", DEFAULT_DENY_HOSTS)],
             ui_confirm_names=list(d.get("ui_confirm_names", DEFAULT_UI_CONFIRM_NAMES)),

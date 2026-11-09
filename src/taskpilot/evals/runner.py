@@ -22,11 +22,13 @@ COMPLETED_LABEL = "task reported completed"
 class TimedModel:
     """Wraps a model runtime and records how long its calls take (separates model latency from everything else)."""
     def __init__(self, inner):
-        self.inner, self.calls, self.seconds = inner, 0, 0.0
+        self.inner, self.calls, self.seconds, self.shots = inner, 0, 0.0, 0
 
     def __getattr__(self, name): return getattr(self.inner, name)
 
     async def propose(self, ctx):
+        if getattr(ctx, "screenshot_b64", None):
+            self.shots += 1                                   # a screenshot was attached to this step's request
         t = time.time()
         try:
             return await self.inner.propose(ctx)
@@ -167,7 +169,8 @@ async def run_spec(spec: TaskSpec, backend, model, *, config: Config | None = No
         return {
             "id": spec.id, "category": spec.category, "goal": goal, "verdict": verdict, "status": ctx.status,
             "failure": "" if verdict == PASS else classify_failure(ctx.status, ctx.error, actions),
-            "duration_s": round(dur, 1), "model_seconds": round(model.seconds, 1), "steps": len(steps), "model_calls": ctx.model_calls,
+            "budget_steps": spec.max_actions, "budget_s": spec.timeout_s,
+            "duration_s": round(dur, 1), "model_seconds": round(model.seconds, 1), "screenshots": model.shots, "steps": len(steps), "model_calls": ctx.model_calls,
             "refused": sum(1 for a in actions if a["status"] == "denied"),
             "failed_steps": sum(1 for a in actions if a["status"] == "failed"),
             "result": ctx.result[:1500], "error": ctx.error[:300], "approvals": approvals,

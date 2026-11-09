@@ -22,6 +22,10 @@ class SnapshotArgs(_P):
     max_elements: int = Field(80, ge=5, le=200)
     query: str = Field("", max_length=60)            # only controls whose name/id contains this
     name_chars: int = Field(90, ge=20, le=800)       # raise (e.g. 400) to read long text such as headlines or answers
+    role: str = Field("", max_length=30)             # only this kind of control, e.g. Hyperlink (a page's links), Button, Edit
+    skip: int = Field(0, ge=0, le=2000)              # page through a long list: skip the first N matches (see the hint)
+    min_chars: int = Field(0, ge=0, le=200)          # only controls whose name is at least this long: content (video titles,
+                                                      # headlines, results), not short menu labels
 
 
 class Selector(_P):
@@ -94,7 +98,7 @@ async def _snapshot(ctx: ToolContext, a: SnapshotArgs) -> dict:
     win, err = await _window(ctx, a.window)
     if err:
         return {"error": err}
-    return await asyncio.to_thread(ctx.backend.ui_snapshot, win, a.max_elements, a.query, a.name_chars)
+    return await asyncio.to_thread(ctx.backend.ui_snapshot, win, a.max_elements, a.query, a.name_chars, a.role, a.skip, a.min_chars)
 
 
 async def _act(ctx: ToolContext, a: Selector, action: str, text: str | None = None) -> dict:

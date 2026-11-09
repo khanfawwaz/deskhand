@@ -7,12 +7,14 @@ import ipaddress
 import os
 import re
 import tempfile
+import time
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..agent.runner import run_command
 from ..policy import Decision, Policy, base_domain
+from ..titles import title_has
 from .registry import NeedsAccess, Tool, ToolContext, ToolRegistry
 
 
@@ -198,9 +200,65 @@ def _check_url(a: UrlArgs, p: Policy) -> Decision:
     return Decision("allow")
 
 
+def _same_page(shown: str, wanted: str) -> bool:
+    """Does the address bar show the page we asked for? Case-insensitive; a site may add www or keep only the path."""
+    a, b = urlparse(shown if "://" in shown else "https://" + shown), urlparse(wanted)
+    same_host = base_domain(a.hostname or "") == base_domain(b.hostname or "")
+    pa, pb = a.path.rstrip("/").lower(), b.path.rstrip("/").lower()
+    same_path = pa == pb or (pb and pa.startswith(pb)) or (pa and pb.startswith(pa) and pa not in ("", "/"))
+    if pb in ("", "/"):
+        same_path = True
+    if b.query and "watch" in pb:                                  # a video address: the video id must match too
+        same_path = same_path and a.query.split("&")[0].lower() == b.query.split("&")[0].lower()
+    return same_host and bool(same_path)
+
+
+def _still_loading(title: str) -> bool:
+    """While a page loads, a browser's tab is titled with its address ('youtube.com/@x/videos - Google Chrome'), which is
+    replaced by the real title moments later. Such a title is not a stable name for the window."""
+    t = re.sub(r"\s+[-–—]\s+(google chrome|microsoft.? edge|mozilla firefox|brave|opera).*$", "", str(title or "").strip(), flags=re.I)
+    return bool(t) and " " not in t and ("/" in t or t.lower().startswith(("http", "www.")))
+
+
+async def _wait_for_page(ctx: ToolContext, url: str) -> tuple[str, str]:
+    """After opening a URL, wait until the browser really shows THAT page (its address bar matches), so the next step can
+    find its window. A window left over from an earlier page does not count. Returns (window title, address) or ('', '')."""
+    from ..agent.gate import BROWSERS, window_allowed
+    from ..titles import norm
+    start = time.monotonic()
+    deadline = start + max(0.0, ctx.policy.page_wait_s)
+    try:
+        w0 = await asyncio.to_thread(ctx.backend.active_window)
+        before = norm(w0.title) if w0 else ""
+    except Exception:
+        before = ""
+    seen_at: float | None = None
+    last: tuple[str, str] = ("", "")
+    while True:
+        try:
+            w = await asyncio.to_thread(ctx.backend.active_window)
+            if w and (w.process or "").lower() in BROWSERS:
+                shown = await asyncio.to_thread(ctx.backend.window_url, w.title)
+                if shown and _same_page(shown, url):
+                    d = await window_allowed(ctx.policy, ctx.backend, w.title, w.process)
+                    if d.allowed or not ctx.policy.cloud_safe:         # never leak an unapproved window's title
+                        last = (w.title, shown)
+                        seen_at = seen_at or time.monotonic()
+                        # the address bar updates at once but the tab TITLE lags: wait for it to change from the old
+                        # page's title (or, for a page that was already open, give it a short moment)
+                        if not _still_loading(w.title) and (norm(w.title) != before or time.monotonic() - seen_at > 2.5):
+                            return last
+        except Exception:
+            return last if last[0] else ("", "")
+        if time.monotonic() >= deadline:
+            return last if last[0] and seen_at and not _still_loading(last[0]) else ("", "")
+        await asyncio.sleep(0.5)
+
+
 async def _browser_open(ctx: ToolContext, a: UrlArgs) -> dict:
     await asyncio.to_thread(ctx.backend.open_url, a.url)
-    return {"opened": True}
+    title, shown = await _wait_for_page(ctx, a.url)
+    return {"opened": True, **({"window": title, "address": shown[:200]} if title else {})}
 
 
 def _check_private_url(a: UrlArgs, p: Policy) -> Decision:
@@ -243,7 +301,7 @@ async def _windows_focus(ctx: ToolContext, a: FocusArgs) -> dict:
         wins = await asyncio.to_thread(ctx.backend.list_windows)
         ok, blocked = False, None
         for w in wins:
-            if a.title.lower() in w["title"].lower():
+            if title_has(w["title"], a.title):
                 d = await window_allowed(ctx.policy, ctx.backend, w["title"], w["process"])
                 if d.allowed:
                     ok = True
@@ -263,7 +321,7 @@ async def _windows_focus(ctx: ToolContext, a: FocusArgs) -> dict:
 
 
 def _verify_focus(a: FocusArgs, d: dict) -> tuple[bool, str]:
-    ok = bool(d.get("focused")) and a.title.lower() in str(d.get("active_title", "")).lower()
+    ok = bool(d.get("focused")) and title_has(d.get("active_title", ""), a.title)
     return ok, f"foreground window is '{d.get('active_title')}'"
 
 
@@ -301,6 +359,28 @@ async def _vscode_open(ctx: ToolContext, a: PathArgs) -> dict:
 
 # --------------------------------------------------------------------------- registration
 
+async def _current_url(ctx: ToolContext, a: "Empty") -> dict:
+    """The address of the page in the foreground browser window (only for an approved window)."""
+    from ..agent.gate import BROWSERS, window_allowed
+    w = await asyncio.to_thread(ctx.backend.active_window)
+    if not w or (w.process or "").lower() not in BROWSERS:      # focus may have drifted: look for an approved browser window
+        w = None
+        for c in await asyncio.to_thread(ctx.backend.list_windows):
+            if (c.get("process") or "").lower() in BROWSERS:
+                d = await window_allowed(ctx.policy, ctx.backend, c["title"], c["process"])
+                if d.allowed:
+                    from ..protocol import WindowInfo
+                    w = WindowInfo(title=c["title"], process=c["process"], pid=c.get("pid", 0))
+                    break
+        if w is None:
+            return {"error": "the foreground window is not a browser"}
+    d = await window_allowed(ctx.policy, ctx.backend, w.title, w.process)
+    if not d.allowed:
+        return {"error": "the foreground browser window is not approved"}
+    url = await asyncio.to_thread(ctx.backend.window_url, w.title)
+    return {"url": (url or "")[:300], "window": w.title} if url else {"error": "could not read the address bar"}
+
+
 def register_builtin(r: ToolRegistry) -> None:
     from .ui_tools import register_ui_tools
     register_ui_tools(r)
@@ -327,8 +407,12 @@ def register_builtin(r: ToolRegistry) -> None:
            lambda c, a: _git(c, a.repo, ["diff", "--stat", "--no-color"]), _check_repo, _verify_exit0,
            readonly=True, idempotent=True, example={"repo": "C:\\work\\repo"}))
     R(Tool("browser.open_url", "Open an http(s) URL in the default browser.", UrlArgs, _browser_open,
-           _check_url, lambda a, d: (bool(d.get("opened")), "URL handed to the default browser (load not confirmed)"),
+           _check_url, lambda a, d: (bool(d.get("opened")), (f"page is open: window '{d['window']}'" if d.get("window")
+                                    else "URL handed to the default browser (load not confirmed)")),
            idempotent=True, needs_screen=True, example={"url": "https://example.com"}))
+    R(Tool("browser.current_url", "The address of the page in the foreground browser window (to check you are on the right "
+           "page, e.g. a video's /watch address).", Empty, _current_url, None,
+           lambda a, d: (bool(d.get("url")), f"address: {d.get('url', '')[:120]}"), readonly=True, idempotent=True))
     R(Tool("browser.open_private", "[disabled unless the policy allows it] Open a URL in a PRIVATE (incognito) "
            "window. Prefer browser.open_url.", UrlArgs, _browser_open_private, _check_private_url,
            lambda a, d: (bool(d.get("opened")), f"opened in a private {d.get('browser', 'browser')} window (load not confirmed)"),

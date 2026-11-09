@@ -72,14 +72,15 @@ async def amain(argv: list[str] | None = None) -> int:
                          confirm_timeout_s=60, screenshot_mode="auto", learn=not a.no_learn)
             r = await run_spec(s, be, model, config=cfg)
             results.append(r)
-            print(f"    -> {r['verdict']} ({r['status']}, {r['steps']} steps, {r['duration_s']}s, model {r['model_seconds']}s over {r['model_calls']} calls)"
+            print(f"    -> {r['verdict']} ({r['status']}, {r['steps']} steps, {r['duration_s']}s, model {r['model_seconds']}s over {r['model_calls']} calls, {r.get('screenshots', 0)} screenshots sent)"
                   + (f" [{r['failure']}]" if r["failure"] else "")
                   + (f" | error: {r['error'][:160]}" if r["error"] else ""), flush=True)
     out = Path(a.out)
     before = report.last_summary(out)
     paths = report.save(results, out, {"suite": a.suite, "model": model_name, "repeats": a.repeats})
     s = report.summarize(results)
-    print(f"\n{s['verdicts']}  pass rate {s['pass_rate']:.0%}  false successes {s['false_success_rate']:.0%}")
+    print(f"\nPILOT SCORE {s['score']}/100  " + "  ".join(f"{k.split('.')[-1]}={v['score']}" for k, v in s["tasks"].items()))
+    print(f"{s['verdicts']}  pass rate {s['pass_rate']:.0%}  false successes {s['false_success_rate']:.0%}")
     if before:
         c = report.compare(before, s)
         print("regressions:", c["regressions"] or "none", "| improvements:", c["improvements"] or "none")

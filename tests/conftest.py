@@ -84,6 +84,7 @@ class FakeBackend(Backend):
         self.ui = FakeUI()
         self.zooms: list[tuple] = []
         self.hosts: dict[str, str] = {}             # window title -> host shown in its address bar
+        self.urls: dict[str, str] = {}              # window title -> the full address shown (when a test needs the path)
         self.apps = {"spotify": r"shell:AppsFolder\SpotifyAB.SpotifyMusic!Spotify"}      # what resolve_app can find
         self.active_process = ""                    # process of the foreground window (real Windows always has one)
 
@@ -117,8 +118,9 @@ class FakeBackend(Backend):
     # ---- UI Automation fake (shares the REAL matching code so selector semantics are tested too)
     def ui_window(self, title):
         names = list(self.ui.windows)
-        t = (title or self.ui.foreground).lower()
-        hit = next((n for n in names if t in n.lower()), None)
+        from taskpilot.titles import norm
+        t = norm(title or self.ui.foreground)
+        hit = next((n for n in names if t in norm(n)), None)
         return None if hit is None else {"title": hit, **self.ui.windows[hit], "handle": 1}
 
     @staticmethod
@@ -142,7 +144,15 @@ class FakeBackend(Backend):
                           scale=2.0, origin_x=100, origin_y=50, captured_at=0, active_window=WindowInfo(title=self.active))
 
     def window_host(self, title):
-        return self.hosts.get(title)
+        if title in self.hosts:
+            return self.hosts[title]
+        from urllib.parse import urlparse
+        return urlparse(self.urls[title]).hostname if title in self.urls else None
+
+    def window_url(self, title):
+        if title in self.urls:
+            return self.urls[title]
+        return f"https://{self.hosts[title]}/" if title in self.hosts else None
 
     def resolve_app(self, name):
         return self.apps.get(name.lower())
@@ -151,9 +161,13 @@ class FakeBackend(Backend):
         self.calls.append(("private_url", url))
         return {"browser": "chrome", "private": True}
 
-    def ui_snapshot(self, win, max_elements, query, name_chars=90):
+    def ui_snapshot(self, win, max_elements, query, name_chars=90, role="", skip=0, min_chars=0):
         els = [e for e in self.ui.elements(win["title"]) if query.lower() in (e["name"] + e["id"]).lower()]
-        shown = els[:max_elements]
+        if role:
+            els = [e for e in els if e["role"].lower() == {"link": "hyperlink"}.get(role.lower(), role.lower())]
+        if min_chars:
+            els = [e for e in els if len(e["name"]) >= min_chars]
+        shown = els[skip:skip + max_elements]
         return {"tree": "\n".join(self._line(e) for e in shown), "count": len(els), "shown": len(shown),
                 "truncated": len(els) > len(shown), "window": {"title": win["title"], "process": win["process"]},
                 "hint": ""}
@@ -268,6 +282,7 @@ def _no_leaked_recipe_tools():
 
 def make_policy(tmp_path) -> Policy:
     return Policy.from_dict({
+        "page_wait_s": 0,
         "approved_apps": {"notepad": r"C:\Windows\System32\notepad.exe"},
         "ui_allowed_windows": ["Calculator", "Contact form"],
         "allowed_dirs": [str(tmp_path)],

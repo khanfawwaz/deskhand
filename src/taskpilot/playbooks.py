@@ -19,7 +19,11 @@ PLAYBOOKS: list[dict] = [
         "ui.snapshot with a short query of the title words to find it). Do NOT pick a video from the channel home "
         "page, trailers or featured rows. A video starts by itself; the 'k' key toggles play/pause. SUCCESS: once the "
         "video page is open (the window title is the video's title and the player is showing), finish with outcome "
-        "done and cite that title as evidence. Do not keep clicking or reopening pages.")},
+        "done and cite that title as evidence. Do not keep clicking or reopening pages. If you do not know a video's title, "
+        "list the page's CONTENT links: ui.snapshot role=Hyperlink min_chars=25 (video links are named like '<title> <length>', "
+        "e.g. 'Prop Hunters is Hilarious 30 minutes'; short names are menus). On a channel's /videos tab they come newest "
+        "first. Click the first one by its full name. For a video you can only describe (a topic, not 'the latest'), search beats browsing a channel: open https://www.youtube.com/results?search_query=<channel>+<topic> and pick the matching result. The tab title and notification count change while a page loads, so "
+        "refer to a window by a stable part of its title. A screenshot (capture_screen) also shows the grid.")},
     {"name": "News research", "keywords": ("news", "research"), "text": NORMAL + (
         "For today's news use https://news.google.com/search?q=<words>+when:1d (for AI: q=artificial+intelligence+"
         "OR+AI+when:1d). Read the headlines straight from that results page: ui.snapshot with name_chars=200 "
@@ -87,6 +91,15 @@ REQUIREMENTS = {
     "Claude": {"requires": ("ui.read_page",), "min_message_chars": 150},
     "News research": {"requires": ("ui.snapshot", "ui.read_page"), "min_message_chars": 150},
 }
+
+
+def final_address_for(goal: str) -> tuple[str, ...]:
+    """What the browser's address must contain for this goal to count as done (checked by code, not by the model).
+    Playing a YouTube video must END on a video page: '/watch' (or a Short / live stream), not a channel or search list."""
+    g = goal.lower()
+    if re.search(r"\b(youtube|you tube)\b", g) and re.search(r"\b(play|watch|run)\b", g):
+        return ("/watch", "/shorts/", "/live/")
+    return ()
 
 
 def requirements_for(goal: str) -> list[dict]:

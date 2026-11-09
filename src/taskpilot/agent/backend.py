@@ -55,7 +55,8 @@ class Backend(ABC):
     def ui_window(self, title: str) -> dict | None:
         raise NotImplementedError
 
-    def ui_snapshot(self, win: dict, max_elements: int, query: str, name_chars: int = 90) -> dict:
+    def ui_snapshot(self, win: dict, max_elements: int, query: str, name_chars: int = 90, role: str = "",
+                    skip: int = 0, min_chars: int = 0) -> dict:
         raise NotImplementedError
 
     def ui_act(self, win: dict, sel: dict, action: str, text: str | None) -> dict:
@@ -76,6 +77,12 @@ class Backend(ABC):
 
     def window_host(self, title: str) -> str | None:
         """Host (e.g. 'chatgpt.com') shown in a browser window's address bar, or None if unknown."""
+        from urllib.parse import urlparse
+        u = self.window_url(title)
+        return urlparse(u).hostname if u else None
+
+    def window_url(self, title: str) -> str | None:
+        """Full address (with https://) shown in a browser window's address bar, or None if unknown."""
         return None
 
     def resolve_app(self, name: str) -> str | None:
@@ -235,8 +242,8 @@ class WindowsBackend(Backend):
         u.GetWindowRect(u.GetForegroundWindow(), ctypes.byref(r))
         return self.screenshot_region(r.left, r.top, r.right - r.left, r.bottom - r.top, max_dimension, upscale=False)
 
-    def window_host(self, title: str) -> str | None:
-        from urllib.parse import urlparse
+    def window_url(self, title: str) -> str | None:
+        """Full address shown in a browser window's address bar (the toolbar's 'Address and search bar'), or None."""
         from . import uia
         hit = next((w for w in self._windows() if w[1] == title), None)
         if hit is None:
@@ -249,7 +256,7 @@ class WindowsBackend(Backend):
                         url = str(e["ctrl"].GetValuePattern().Value).strip()
                     except Exception:
                         return None
-                    return urlparse(url if "://" in url else "https://" + url).hostname
+                    return url if "://" in url else "https://" + url
         return None
 
     def _focus_hwnd(self, hwnd: int) -> bool:
@@ -317,9 +324,10 @@ class WindowsBackend(Backend):
         from . import uia
         return uia.find_window(title)
 
-    def ui_snapshot(self, win: dict, max_elements: int, query: str, name_chars: int = 90) -> dict:
+    def ui_snapshot(self, win: dict, max_elements: int, query: str, name_chars: int = 90, role: str = "",
+                    skip: int = 0, min_chars: int = 0) -> dict:
         from . import uia
-        return uia.snapshot(win, max_elements, query, name_len=name_chars)
+        return uia.snapshot(win, max_elements, query, name_len=name_chars, role=role, skip=skip, min_chars=min_chars)
 
     def ui_act(self, win: dict, sel: dict, action: str, text: str | None) -> dict:
         from . import uia
@@ -365,8 +373,8 @@ class WindowsBackend(Backend):
         import ctypes
         import time
         u = ctypes.windll.user32
-        want = title.lower()
-        match = next((w for w in self._windows() if want in w[1].lower()), None)
+        from ..titles import title_has
+        match = next((w for w in self._windows() if title_has(w[1], title)), None)
         if match is None:
             return {"focused": False, "active_title": (self.active_window() or WindowInfo()).title,
                     "error": f"no visible window with '{title}' in its title"}
@@ -377,7 +385,7 @@ class WindowsBackend(Backend):
         u.SetForegroundWindow(hwnd)
         time.sleep(0.3)
         w = self.active_window()
-        return {"focused": bool(w) and want in w.title.lower(), "active_title": w.title if w else ""}
+        return {"focused": bool(w) and title_has(w.title, title), "active_title": w.title if w else ""}
 
     def get_clipboard(self) -> str:
         r = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],

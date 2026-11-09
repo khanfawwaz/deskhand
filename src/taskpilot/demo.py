@@ -16,7 +16,7 @@ DEMO_WINDOW = {"title": "Demo Chat", "process": "demo.exe", "pid": 1, "handle": 
 
 
 def demo_policy() -> Policy:
-    return Policy.from_dict({"ui_allowed_windows": ["Demo"], "cloud_safe": True})
+    return Policy.from_dict({"ui_allowed_windows": ["Demo"], "cloud_safe": True, "page_wait_s": 0})   # simulated: nothing to wait for
 
 
 class DemoBackend(Backend):
@@ -41,7 +41,7 @@ class DemoBackend(Backend):
     def focus_window(self, title): return {"focused": True, "active_title": "Demo Chat"}
     def ui_window(self, title): return dict(DEMO_WINDOW) if title.lower() in ("", "demo chat", "demo") else None
 
-    def ui_snapshot(self, win, max_elements, query, name_chars=90):
+    def ui_snapshot(self, win, max_elements, query, name_chars=90, role="", skip=0, min_chars=0):
         tree = 'Edit "Message" id=msg\nButton "Send" id=send\nText "Demo conversation" id=title'
         return {"tree": tree, "count": 3, "shown": 3, "truncated": False,
                 "window": {"title": win["title"], "process": win["process"]}, "hint": ""}
