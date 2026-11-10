@@ -1,0 +1,27 @@
+/* Design tokens: ported unchanged from the original app so the look stays identical. Light and dark, system or forced. */
+:root {
+  color-scheme: light dark;
+  /* palette: #FAFAFA Dr. White, #EBEDEC Moonlit Snow, #DBE5DD Aqua Squeeze, #C1C2C1 Stonewall Grey, #6ED987 Jube Green,
+     #1BC237 Green With Envy. Calm and neutral: green is used sparingly (the orb, small dots), never as a big fill. */
+  --bg: #FFFFFF; --side: #EBEDEC; --surface: #FFFFFF; --surface-2: #F2F4F3; --bubble: #DBE5DD; --line: #DCE1DE;
+  --text: #12241d; --muted: #6a7a72; --primary: #12241d; --primary-ink: #FAFAFA; --accent: #3d6b52;
+  --leaf: #1BC237; --mint: #6ED987; --stone: #C1C2C1;
+  --good: #23823d; --bad: #b4492e; --warn: #8f5f14; --busy: #3d6b52; --focus: #12241d;
+  --radius: 16px; --shadow: 0 1px 2px rgba(18,36,29,.05), 0 6px 22px rgba(18,36,29,.06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --side-w: 288px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f1311; --side: #141917; --surface: #1a201d; --surface-2: #212825; --bubble: #26302b; --line: #2b342f;
+    --text: #e9eeeb; --muted: #97a69d; --primary: #e9eeeb; --primary-ink: #0f1311; --accent: #9fc9ae;
+    --leaf: #1BC237; --mint: #6ED987; --stone: #5b655f;
+    --good: #6ED987; --bad: #e0795c; --warn: #e3b07a; --busy: #9fc9ae; --focus: #e9eeeb;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35); }
+}
+:root[data-theme="dark"] { --bg: #0f1311; --side: #141917; --surface: #1a201d; --surface-2: #212825; --bubble: #26302b; --line: #2b342f;
+    --text: #e9eeeb; --muted: #97a69d; --primary: #e9eeeb; --primary-ink: #0f1311; --accent: #9fc9ae;
+    --leaf: #1BC237; --mint: #6ED987; --stone: #5b655f;
+    --good: #6ED987; --bad: #e0795c; --warn: #e3b07a; --busy: #9fc9ae; --focus: #e9eeeb;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35); }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

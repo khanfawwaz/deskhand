@@ -1,0 +1,8 @@
+.top { display: flex; align-items: center; gap: .8rem; padding: .7rem 1.2rem; border-bottom: 1px solid var(--line); }
+.title { flex: 1; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn { font-size: .78rem; color: var(--muted); display: inline-flex; align-items: center; gap: .4rem; }
+.conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.conn[data-state='online']::before { background: var(--good); }
+.welcome { flex: 1; display: grid; align-content: center; justify-items: center; text-align: center; padding: 2rem 1rem; }
+.welcome h2 { font-size: 1.8rem; }
+.welcome .hint { max-width: 28rem; }

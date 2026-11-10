@@ -1,0 +1,42 @@
+/* Base element styles and shared primitives (sign-in card, buttons), ported from the original app. */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; height: 100%; }
+body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font); }
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
+h2 { font-size: 1.1rem; } h3 { font-size: .95rem; }
+p { margin: .4rem 0; }
+code { background: var(--surface-2); padding: .1rem .4rem; border-radius: 6px; font-size: .92em; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.hint { color: var(--muted); font-size: .86rem; }
+.err { color: var(--bad); font-size: .9rem; min-height: 1.2em; }
+.lead { color: var(--muted); }
+.logo { width: 28px; height: 28px; border-radius: 8px; background: url('../assets/icon-192.png') center / cover no-repeat; flex: none; }
+
+/* ---------------------------------------------------------------- sign-in (before the app) */
+.topbar { display: flex; align-items: center; padding: calc(env(safe-area-inset-top) + .8rem) 1.2rem .8rem; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: .6rem; } .brand h1 { font-size: 1.15rem; }
+.pair { max-width: 460px; margin: 0 auto; padding: 1.2rem; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem; box-shadow: var(--shadow); }
+.perks { padding-left: 1.2rem; color: var(--muted); } .perks li { margin: .25rem 0; }
+label { display: block; font-size: .85rem; color: var(--muted); margin: .8rem 0 .25rem; }
+input, textarea, select { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+  padding: .7rem .85rem; font: inherit; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+
+/* ---------------------------------------------------------------- buttons */
+.primary { background: var(--primary); color: var(--primary-ink); border: 0; border-radius: 12px; padding: .7rem 1rem; font-weight: 600; }
+.primary:hover { opacity: .9; } .primary:disabled { opacity: .5; cursor: default; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 12px; padding: .65rem 1rem; }
+.ghost:hover { background: var(--surface-2); }
+.danger { background: transparent; color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line)); border-radius: 12px; padding: .65rem 1rem; }
+.link { background: none; border: 0; color: var(--accent); padding: .3rem 0; text-decoration: underline; text-underline-offset: 3px; }
+.wide { width: 100%; margin-top: .6rem; padding: .65rem 1rem; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.wide.primary { background: var(--primary); border-color: transparent; }
+.wide.danger { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); background: transparent; }
+.icon-btn { background: none; border: 0; padding: .4rem; border-radius: 10px; display: inline-grid; place-items: center; }
+.icon-btn:hover { background: var(--surface-2); }
+.row { display: flex; gap: .6rem; align-items: center; margin-top: .8rem; } .row > * { flex: 1; }
+.legal-links { text-align: center; color: var(--muted); font-size: .84rem; margin: 1rem auto 0; max-width: 28rem; }
+.legal-links a { color: var(--accent); text-underline-offset: 3px; }

@@ -1,0 +1,53 @@
+/* The privacy policy and the terms: the look of the server's pages (src/taskpilot/web/legal.css), scoped to .legal so it
+   never leaks into the app. Colours come from the app's own tokens, so light and dark follow the chosen theme. */
+.legal { min-height: 100%; background: var(--bg); color: var(--text); font: 17px/1.65 var(--font); }
+.legal a { color: var(--accent); text-underline-offset: 3px; }
+
+.legal-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .8rem; padding: .7rem 1.2rem;
+             background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.legal-brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; color: var(--text) !important; text-decoration: none; }
+.legal-brand .logo { width: 30px; height: 30px; }
+.legal-top nav { margin-left: auto; display: flex; gap: .3rem; flex-wrap: wrap; }
+.legal-top nav a { padding: .3rem .8rem; border-radius: 999px; text-decoration: none; color: var(--muted); font-size: .95rem; }
+.legal-top nav a:hover, .legal-top nav a[aria-current="page"] { background: var(--surface-2); color: var(--text); }
+
+.legal-main { max-width: 780px; margin: 0 auto; padding: 2.2rem 1.2rem 5rem; }
+.legal-main h1 { font-size: clamp(1.9rem, 5vw, 2.5rem); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 .4rem; font-weight: 700; }
+.legal-main h2 { font-size: 1.35rem; margin: 2.6rem 0 .5rem; letter-spacing: -.01em; scroll-margin-top: 4.5rem; font-weight: 700; }
+.legal-main h3 { font-size: 1.05rem; margin: 1.4rem 0 .2rem; }
+.legal-main p, .legal-main li { color: var(--muted); }
+.legal-main p { margin: 1em 0; }
+.legal-main li { margin: .35rem 0; }
+.legal-main strong, .legal-main b { color: var(--text); }
+.legal-main ul { padding-left: 1.3rem; }
+.legal-main code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: .88em; color: var(--text); }
+.legal-main .date { color: var(--muted); font-size: .95rem; margin: 0 0 1.4rem; }
+
+.legal-main .glance { background: var(--bubble); border-radius: var(--radius); padding: 1.1rem 1.3rem; margin: 1.2rem 0 1.6rem; }
+.legal-main .glance h2 { margin: 0 0 .4rem; font-size: 1.1rem; }
+.legal-main .glance li { color: var(--text); }
+.legal-main .toc { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; margin: 0 0 .5rem; }
+.legal-main .toc li { margin: 0; }
+.legal-main .toc a { display: block; padding: .3rem .8rem; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: .9rem; color: var(--text); background: var(--surface); }
+.legal-main .toc a:hover { background: var(--surface-2); }
+
+.legal-main .table-wrap { overflow-x: auto; margin: .8rem 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.legal-main table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .95rem; }
+.legal-main th, .legal-main td { text-align: left; vertical-align: top; padding: .7rem .9rem; border-bottom: 1px solid var(--line); color: var(--muted); }
+.legal-main th { color: var(--text); background: var(--surface-2); font-weight: 650; }
+.legal-main tr:last-child td { border-bottom: 0; }
+.legal-main td:first-child { color: var(--text); font-weight: 600; }
+
+.legal-main .note { border-left: 4px solid var(--leaf, #1BC237); background: var(--surface-2); padding: .7rem 1rem; border-radius: 0 12px 12px 0; margin: 1rem 0; }
+.legal-main .note p { margin: 0; }
+.legal-main footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .92rem; }
+
+@media (max-width: 560px) {
+  .legal { font-size: 16px; }
+  .legal-top { padding: .6rem .8rem; }
+  .legal-name { display: none; }
+  .legal-main { padding-top: 1.4rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.legal) { scroll-behavior: smooth; }
+}
