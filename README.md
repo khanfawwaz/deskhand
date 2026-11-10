@@ -341,3 +341,11 @@ written down in plain language in the app's [privacy policy](src/taskpilot/web/p
 - **Records and checklists:** [docs/DATA_PROTECTION.md](docs/DATA_PROTECTION.md) (data inventory, processors, rights, breach steps,
   risks), [docs/CHROME_STORE_PRIVACY.md](docs/CHROME_STORE_PRIVACY.md) (answers for the Chrome Web Store),
   [SECURITY.md](SECURITY.md) (how to report a vulnerability).
+
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT, see [LICENSE](LICENSE). Copyright (c) 2026 Muhammad Fawwaz Khan.
