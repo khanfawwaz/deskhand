@@ -63,7 +63,7 @@ function SignedIn() {
   return <Frame me={me.data} stream={stream} />;
 }
 
-/** The signed-in frame: preview note, phone top bar, sidebar (a drawer on phones), the screen, dialogs, palette, toasts. */
+/** The signed-in frame: phone top bar, sidebar (a drawer on phones), the screen, dialogs, palette, toasts. */
 function Frame({ me, stream }: { me: Me; stream: StreamStatus }) {
   const context: ShellContext = { me, stream };
   const { pathname } = useLocation();
@@ -94,9 +94,6 @@ function Frame({ me, stream }: { me: Me; stream: StreamStatus }) {
 
   return (
     <div className={styles.frame}>
-      <p className={styles.preview} role="note">
-        Preview of the new Deskhand app. The full app is still at <a href="/app/">/app/</a>.
-      </p>
       <div className={styles.topbar}>
         <button
           ref={menuRef}

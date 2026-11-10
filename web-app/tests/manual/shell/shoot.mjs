@@ -11,7 +11,7 @@ fs.mkdirSync(out, { recursive: true });
 const server = createFakeBackend();
 await new Promise((r) => server.listen(4180, '127.0.0.1', r));
 const origin = 'http://127.0.0.1:4180';
-const BASE = origin + '/app-next/';
+const BASE = origin + '/app/';
 const chrome = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const browser = await chromium.launch(fs.existsSync(chrome) ? { executablePath: chrome } : {});
 

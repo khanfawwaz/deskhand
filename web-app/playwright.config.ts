@@ -25,7 +25,7 @@ export default defineConfig({
   projects: [{ name: 'chrome', use: { ...devices['Desktop Chrome'], viewport: { width: 1200, height: 800 } } }],
   webServer: {
     command: 'node tests/e2e/fakeBackend.mjs',
-    url: `http://127.0.0.1:${PORT}/app-next/`,
+    url: `http://127.0.0.1:${PORT}/app/`,
     env: { E2E_PORT: String(PORT) },
     reuseExistingServer: !process.env.CI,
     timeout: 20_000,

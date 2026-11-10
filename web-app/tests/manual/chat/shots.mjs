@@ -30,7 +30,7 @@ async function shot(name, { mode = 'idle', url = '/', theme = 'light', width = 1
     localStorage.setItem('pilot.token', 'tok');
     localStorage.setItem('pilot.settings', JSON.stringify({ theme: th }));
   }, theme);
-  await page.goto(ORIGIN + '/app-next' + url, { waitUntil: 'networkidle2' });
+  await page.goto(ORIGIN + '/app' + url, { waitUntil: 'networkidle2' });
   await sleep(1200);
   if (act) await act(page);
   await sleep(500);

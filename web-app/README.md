@@ -4,16 +4,15 @@ The browser app for Deskhand (sign in, connect a computer, give tasks, answer qu
 React and TypeScript. It builds to plain static files, and the Deskhand server serves them. It talks to the server
 over the same HTTP API the original app uses; nothing on the server had to change for it.
 
-> Status: the foundation is in place (build, routing, typed API client, live event stream, sign-in, tests) and the
-> remaining screens are being moved over from the original app in `src/taskpilot/web/`. The new app is served at
-> `/app-next/` while the original keeps `/app/`.
+This is the Deskhand app, served at `/app/`. (The original single-file app it replaced is gone; only the privacy and
+terms pages are left in `src/taskpilot/web/`, and old `/app-next/` links redirect to `/app/`.)
 
 ## Run it
 
 ```bash
 cd web-app
 npm ci                 # install exactly what package-lock.json says
-npm run dev            # http://localhost:5173/app-next/  (needs a Deskhand server on 127.0.0.1:8767, see below)
+npm run dev            # http://localhost:5173/app/  (needs a Deskhand server on 127.0.0.1:8767, see below)
 npm test               # unit and component tests (Vitest + Testing Library + a mock server)
 npm run lint
 npm run typecheck
@@ -37,13 +36,12 @@ A local server for `npm run dev` to talk to: from the repository root, `python s
 ## How it is served
 
 `python scripts/build_web.py` builds the app and copies it to `src/taskpilot/webapp/` (generated, not in git).
-`src/taskpilot/spa.py` serves that folder at `/app-next/`: any page-like address gets `index.html` so the router can
+`src/taskpilot/spa.py` serves that folder at `/app/`: any page-like address gets `index.html` so the router can
 take over (deep links and reloads work), files in `assets/` carry a content hash and are cached for a year,
 everything else is re-checked on each load. The Docker image runs the same build in its own Node stage
 (`deploy/docker/Dockerfile`), so a server built from the repository always has a fresh app.
 
-The base path is set in one place, `app-base.ts` (`/app-next/` today). When the new app replaces the old one,
-change it to `/app/` together with `MOUNT` in `src/taskpilot/spa.py`.
+The base path is set in one place, `app-base.ts` (`/app/`), kept in step with `MOUNT` in `src/taskpilot/spa.py`.
 
 The server sends a strict content-security policy (no inline scripts), so the theme is applied before first paint by
 a tiny external file, `public/theme-init.js`, not by an inline script.

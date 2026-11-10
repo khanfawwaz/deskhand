@@ -7,7 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const BASE = '/app-next/';
+export const BASE = '/app/';
 export const TEST_CODE = 'ABCD-EFGH'; // the code "emailed" to anyone
 export const TOKEN = 'e2e-token';
 

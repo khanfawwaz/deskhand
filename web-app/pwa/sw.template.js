@@ -5,7 +5,7 @@
      on the next load. The saved copy is only used when the network is down: the app is never stale after a deploy.
    - Files in assets/ are saved the first time and reused (their name changes when their content does).
    - It NEVER touches the API (/v1, /agent): tasks, tokens and results always come live. It only sees addresses under its own scope.
-   - Old caches are deleted when a new version takes over. */
+   - Old caches are deleted when a new version takes over, including the original app's (it used the same /app/sw.js). */
 const VERSION = '__VERSION__';
 const CACHE = 'deskhand-app-' + VERSION;
 const PRECACHE = __PRECACHE__;
@@ -26,7 +26,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('deskhand-app-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))) // every older cache, the original app's too
       .then(() => self.clients.claim()),
   );
 });

@@ -35,7 +35,7 @@ for (const [scheme, width, height] of [['light', 1000, 900], ['dark', 1000, 900]
   // --- connect dialog: waiting, connected, chrome step in its three states
   await post('/__state', { devices: [], extension_url: '' });
   await session(scheme, width, height, async (page) => {
-    await page.goto(`${ORIGIN}/app-next/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('dialog[open] [data-testid=connect-command]');
     await sleep(500);
     await dialogShot(page, `connect-1-waiting-${tag}`);
@@ -47,7 +47,7 @@ for (const [scheme, width, height] of [['light', 1000, 900], ['dark', 1000, 900]
   });
   await post('/__state', { devices: [], extension_url: 'https://chromewebstore.google.com/detail/deskhand/abc' });
   await session(scheme, width, height, async (page) => {
-    await page.goto(`${ORIGIN}/app-next/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('dialog[open] [data-testid=connect-command]');
     await post('/__state', { devices: [DEV] }); await post('/__push');
     await sleep(2200);
@@ -59,7 +59,7 @@ for (const [scheme, width, height] of [['light', 1000, 900], ['dark', 1000, 900]
   // --- settings, full height
   await post('/__state', { devices: [DEV, { device_id: 'd2', name: 'Den laptop', online: false, last_seen: 1, extension: true }], extension_url: '' });
   await session(scheme, width, 6000, async (page) => {
-    await page.goto(`${ORIGIN}/app-next/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('button[aria-label="Settings"], button[aria-label="Workspace and settings"]');
     // open Settings through the store flag exposed by the Sidebar user row, else by the keyboard-free route below
     const opened = await page.evaluate(() => {

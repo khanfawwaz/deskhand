@@ -30,7 +30,6 @@ from typing import Any, Callable
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .datarights import CONFIRM_PHRASE
@@ -39,7 +38,6 @@ from .prefs import parse_preference
 from .states import TERMINAL
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
-WEB_DIR = Path(__file__).parent / "web"
 ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"          # no 0/O/1/I/L: easy to read out and type
 TERMINAL_VALUES = {s.value for s in TERMINAL}
 NOTE_MAX = 160
@@ -628,7 +626,6 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
     def root():
         return RedirectResponse("/app/")
 
-    app.mount("/app", StaticFiles(directory=str(WEB_DIR), html=True), name="app")
     from .distribution import install_distribution
     install_distribution(app, store, client)              # one-line install + auto-update for laptops
     from .login import install_login

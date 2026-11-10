@@ -1,5 +1,5 @@
 // A tiny fake Deskhand backend for looking at the chat in a real browser (not part of the test suite).
-//   node tests/manual/chat/server.mjs <dist folder>      -> http://127.0.0.1:5181/app-next/
+//   node tests/manual/chat/server.mjs <dist folder>      -> http://127.0.0.1:5181/app/
 // Switch what is on screen with  GET /__mode/idle | running | question | access | confirm
 import http from 'node:http';
 import fs from 'node:fs';
@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const DIST = path.resolve(process.argv[2] ?? 'dist');
 const PORT = 5181;
-const BASE = '/app-next';
+const BASE = '/app';
 const now = () => Math.floor(Date.now() / 1000);
 
 const devices = [
@@ -273,7 +273,7 @@ http
     }
     if (p.startsWith('/v1/')) return json(res, 404, { detail: 'not in the fake' });
 
-    // static files under /app-next/, with the single-page fallback
+    // static files under /app/, with the single-page fallback
     if (!p.startsWith(BASE)) {
       res.writeHead(302, { Location: BASE + '/' });
       return res.end();

@@ -85,14 +85,14 @@ test.describe('the app shell (service worker)', () => {
   test('is installed in a production build, covers the app and keeps the Google file and icons served', async ({ page, request }) => {
     await page.goto(BASE);
     const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
-    expect(scope).toMatch(/\/app-next\/$/);
+    expect(scope).toMatch(/\/app\/$/);
     const keys = await page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('deskhand-app-')));
     expect(keys).toHaveLength(1);
     const cached = await page.evaluate(async () => {
       const name = (await caches.keys())[0]!;
       return (await (await caches.open(name)).keys()).map((r) => new URL(r.url).pathname);
     });
-    expect(cached).toContain('/app-next/index.html');
+    expect(cached).toContain('/app/index.html');
     expect(cached.some((p) => /\/assets\/index-.*\.js$/.test(p))).toBe(true);
     expect((await request.get(`${BASE}googleaa05301828e8707d.html`)).status()).toBe(200);
     expect((await request.get(`${BASE}icons/icon-192.png`)).status()).toBe(200);
@@ -110,7 +110,7 @@ test.describe('the app shell (service worker)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Deskhand' })).toBeVisible();
     await context.setOffline(false);
     // network first: with the network back, the page address is asked of the server again (never answered from the saved copy)
-    const count = async () => ((await (await request.get('/__test/hits')).json()) as Record<string, number>)['/app-next/privacy'] ?? 0;
+    const count = async () => ((await (await request.get('/__test/hits')).json()) as Record<string, number>)['/app/privacy'] ?? 0;
     const before = await count();
     await page.goto(`${BASE}privacy`);
     await expect(page.getByRole('heading', { level: 1, name: 'Privacy policy' })).toBeVisible();

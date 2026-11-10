@@ -9,7 +9,7 @@ import path from 'node:path';
 
 const dist = path.resolve(process.argv[2] ?? 'dist');
 const PORT = 5182;
-const BASE = '/app-next/';
+const BASE = '/app/';
 const state = {
   devices: [],
   extension_url: '',

@@ -13,7 +13,7 @@ initTheme();
 registerServiceWorker(); // production builds only
 
 const queryClient = makeQueryClient();
-// Vite's base is '/app-next/' (see app-base.ts); the router wants it without the trailing slash
+// Vite's base is '/app/' (see app-base.ts); the router wants it without the trailing slash
 const router = createBrowserRouter(routes, { basename: import.meta.env.BASE_URL.replace(/\/$/, '') });
 
 createRoot(document.getElementById('root')!).render(

@@ -34,14 +34,13 @@ function signedIn(me = ME) {
 }
 
 describe('the signed-in app', () => {
-  it('shows who and what: workspace, computers, the welcome and the preview note', async () => {
+  it('shows who and what: workspace, computers, the welcome', async () => {
     signedIn();
     renderApp('/');
     expect(await screen.findByRole('heading', { name: /what should i do/i })).toBeInTheDocument();
     const side = screen.getByRole('complementary', { name: /deskhand/i });
     expect(within(side).getByText('Alex Home')).toBeInTheDocument();
     expect(within(side).getByText('Alex-Laptop')).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent(/preview of the new deskhand app/i);
   });
 
   it('goes online, and keeps the list of computers current from the live feed', async () => {

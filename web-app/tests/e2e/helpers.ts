@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 
-export const BASE = '/app-next/';
+export const BASE = '/app/';
 export const TEST_CODE = 'ABCD-EFGH';
 export const TOKEN = 'e2e-token';
 

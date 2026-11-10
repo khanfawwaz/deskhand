@@ -263,11 +263,11 @@ def create_app(store: Store, hub: DeviceHub, orch: Orchestrator, admin_key: str)
                     sockets.pop(device_id, None)
                     ext_status.pop(device_id, None)
 
-    install_client_api(app, store, hub, orch, auth)      # pairing, /v1 for the Pilot app, and /app itself
+    install_client_api(app, store, hub, orch, auth)      # pairing and /v1 for the app
     from .legalpages import install_legal_pages
     install_legal_pages(app)                             # /privacy and /terms: clean addresses, no ".html"
     from .spa import install_spa
-    install_spa(app)                                     # the new React app at /app-next/ (only once it has been built)
+    install_spa(app)                                     # the Deskhand app itself, at /app/
     return app
 
 
