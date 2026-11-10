@@ -2,17 +2,19 @@
 there is not, and go BACK to the old image when the new one does not become healthy. Docker is replaced by a tiny
 stand-in, so this runs anywhere bash exists."""
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from conftest import working_bash
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "deploy" / "server" / "deskhand-pull.sh"
 IMAGE = "ghcr.io/test/deskhand-server:latest"
 
-pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+BASH = working_bash()
+pytestmark = pytest.mark.skipif(BASH is None, reason="no working bash on this machine")
 
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 D="$FAKE_DOCKER_DIR"
@@ -65,7 +67,7 @@ def box(tmp_path):
             (d / "up_fail").write_text("x")
         env = {**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"], "FAKE_DOCKER_DIR": str(d),
                "DESKHAND_DEPLOY_DIR": str(work), "DESKHAND_IMAGE": IMAGE, "DESKHAND_HEALTH_WAIT": "6"}
-        r = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+        r = subprocess.run([BASH, str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
         ups = (d / "ups.log").read_text().split("\n") if (d / "ups.log").exists() else []
         return r, [u for u in ups if u], (d / "local_id").read_text().strip() if (d / "local_id").exists() else None
 

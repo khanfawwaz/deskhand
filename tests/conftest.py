@@ -440,3 +440,21 @@ def pytest_runtest_logreport(report):
         last = [ln for ln in report.longreprtext.strip().splitlines() if ln.strip()][-1:] or [""]
         sys.__stdout__.write(f"::error title={report.nodeid}::{last[0][:300].replace(chr(10), ' ')}\n")
         sys.__stdout__.flush()
+
+
+def working_bash():
+    """A bash that really runs scripts, or None. On a Windows machine `bash` can be the WSL launcher with no Linux
+    installed (it prints a message and fails), so try Git's bash as well and check each one with a one-word script."""
+    import os
+    import shutil
+    import subprocess
+    for exe in (shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"):
+        if not exe or not os.path.exists(exe):
+            continue
+        try:
+            r = subprocess.run([exe, "-c", "echo ok"], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0 and r.stdout.strip() == "ok":
+            return exe
+    return None

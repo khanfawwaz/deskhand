@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import working_bash
+
 D = Path(__file__).resolve().parents[1] / "deploy"
 
 
@@ -34,9 +36,9 @@ def test_the_laptop_server_listens_on_this_machine_only():
     assert "--host 127.0.0.1" in ps and "-R 127.0.0.1:18765:127.0.0.1:8765" in ps
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+@pytest.mark.skipif(working_bash() is None, reason="no working bash on this machine")
 def test_the_oracle_script_is_valid_shell():
-    r = subprocess.run(["bash", "-n", str(D / "laptop" / "oracle-setup.sh")], capture_output=True, text=True)
+    r = subprocess.run([working_bash(), "-n", str(D / "laptop" / "oracle-setup.sh")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
 
