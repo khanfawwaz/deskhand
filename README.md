@@ -327,3 +327,17 @@ The installer makes Deskhand a proper app, not a hidden Python script:
 
 Code: `taskpilot/agent/app.py` (window + tray, plain Win32 through ctypes, no GUI toolkit), `launcher.py` (the Supervisor:
 start/stop/restart/rollback), `boot.py` (`--root` starts the current version straight from the install folder).
+
+## Privacy and data
+
+Deskhand is free and has no ads, analytics, tracking or cookies. What it stores, who else receives it, and for how long is
+written down in plain language in the app's [privacy policy](src/taskpilot/web/privacy.html) and
+[terms of use](src/taskpilot/web/terms.html) (served at `/privacy` and `/terms`).
+
+- **Your data, your call:** Settings > *Your data* downloads everything stored about you as JSON (`GET /v1/export`) or erases
+  it (`POST /v1/delete-account`, type-to-confirm). The server owner can erase a workspace with `DELETE /workspaces/{id}`.
+- **Retention:** finished tasks and their steps are deleted after 90 days (`TASKPILOT_RETENTION_DAYS`, `0` keeps them),
+  usage counts after 400 days (`TASKPILOT_USAGE_RETENTION_DAYS`).
+- **Records and checklists:** [docs/DATA_PROTECTION.md](docs/DATA_PROTECTION.md) (data inventory, processors, rights, breach steps,
+  risks), [docs/CHROME_STORE_PRIVACY.md](docs/CHROME_STORE_PRIVACY.md) (answers for the Chrome Web Store),
+  [SECURITY.md](SECURITY.md) (how to report a vulnerability).

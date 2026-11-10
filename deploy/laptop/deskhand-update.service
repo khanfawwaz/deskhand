@@ -1,0 +1,14 @@
+# Pulls new code from GitHub and restarts the laptop server only when something changed.
+#   sudo cp deploy/laptop/deskhand-update.* /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now deskhand-update.timer
+# Needs this one sudo rule (sudo visudo -f /etc/sudoers.d/deskhand):
+#   deskhand ALL=(root) NOPASSWD: /bin/systemctl restart deskhand-server
+[Unit]
+Description=Deskhand update check
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=deskhand
+Environment=DESKHAND_SERVICE=deskhand-server
+ExecStart=/usr/bin/env bash /opt/deskhand/deploy/update.sh

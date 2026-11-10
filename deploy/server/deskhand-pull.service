@@ -1,0 +1,10 @@
+[Unit]
+Description=Fetch and start the newest Deskhand image
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=/usr/bin/env bash __DIR__/deskhand-pull.sh

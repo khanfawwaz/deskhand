@@ -1,0 +1,21 @@
+# The tunnel from the laptop OUT to the Oracle server (Linux laptop). The laptop dials out, so no port is opened at home.
+#   sudo cp deploy/laptop/deskhand-tunnel.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now deskhand-tunnel
+# Replace ORACLE_IP (and the key path) first.
+[Unit]
+Description=Deskhand tunnel to the Oracle server
+After=network-online.target deskhand-server.service
+Wants=network-online.target
+
+[Service]
+User=deskhand
+# -R makes Oracle's 127.0.0.1:18765 lead to this laptop's 127.0.0.1:8765. Oracle only ever sees it on its own loopback.
+ExecStart=/usr/bin/ssh -N -T -i /home/deskhand/.ssh/deskhand_tunnel \
+  -o ExitOnForwardFailure=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=yes -o BatchMode=yes \
+  -R 127.0.0.1:18765:127.0.0.1:8765 ubuntu@ORACLE_IP
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+# Deskhand on the home server, from the published image (the GitHub workflow builds it; deskhand-pull.sh fetches it).
+#
+#   visitors -> Oracle nginx (https) -> Tailscale -> this machine :8766 -> container :8765
+#
+# The database and secrets live on the big disk (/data/deskhand), never in the image or in this file.
+services:
+  deskhand:
+    image: ${DESKHAND_IMAGE:-ghcr.io/khanfawwaz/deskhand-server:latest}
+    container_name: deskhand_server
+    restart: unless-stopped
+    pull_policy: never                 # deskhand-pull.sh decides when to pull, so it can check health and roll back
+    user: "1000:1000"                  # owner of /data/deskhand on the host, so the database file can be written
+    env_file: /data/deskhand/deskhand.env
+    ports:
+      - "8766:8765"                    # Oracle reaches it at <this machine's Tailscale address>:8766
+    volumes:
+      - /data/deskhand:/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

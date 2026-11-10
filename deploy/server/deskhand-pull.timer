@@ -1,0 +1,10 @@
+[Unit]
+Description=Look for a new Deskhand image every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

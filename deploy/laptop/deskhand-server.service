@@ -1,0 +1,24 @@
+# Deskhand server on the laptop (Linux). Install:
+#   sudo cp deploy/laptop/deskhand-server.service /etc/systemd/system/deskhand-server.service   (edit User and paths)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now deskhand-server
+# /etc/deskhand.env holds the secrets, chmod 600. See deploy/laptop/laptop.env.example.
+[Unit]
+Description=Deskhand server (laptop)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=deskhand
+WorkingDirectory=/opt/deskhand
+EnvironmentFile=/etc/deskhand.env
+# Listens on this laptop only. The Oracle server reaches it through the SSH tunnel; nothing is opened to the internet.
+ExecStart=/opt/deskhand/.venv/bin/taskpilot-server --host 127.0.0.1 --port 8765 \
+  --policy /opt/deskhand/server_policy.json --db /var/lib/deskhand/deskhand.db --provider openai
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/deskhand /var/lib/deskhand
+
+[Install]
+WantedBy=multi-user.target
