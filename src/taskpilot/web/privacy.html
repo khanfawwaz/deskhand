@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Deskhand privacy policy</title>
+<script src="/app/theme.js"></script>
+<link rel="canonical" href="https://deskhand.fawwazkhan.dev/privacy">
+<link rel="stylesheet" href="/app/legal.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/app/"><span class="logo" aria-hidden="true"></span><span class="name">Deskhand</span></a>
+  <nav aria-label="Legal pages">
+    <a href="/privacy" aria-current="page">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="/app/">Open Deskhand</a>
+  </nav>
+</header>
+
+<main>
+  <h1>Privacy policy</h1>
+  <p class="date">Last updated 9 November 2026. Applies to the Deskhand web app, the Deskhand app for Windows, the Deskhand server at deskhand.fawwazkhan.dev and the Deskhand Chrome extension.</p>
+
+  <section class="glance" aria-labelledby="glance">
+    <h2 id="glance">The short version</h2>
+    <ul>
+      <li>Deskhand is a <strong>small independent project, free of charge</strong>. Nobody pays for it, and your data is not the product.</li>
+      <li>We <strong>do not sell your data</strong>, show ads, or run analytics or tracking. There are <strong>no cookies</strong>.</li>
+      <li>To do a task, Deskhand sends the text it needs (and sometimes a picture of the window it is working in) to an AI model provider. <a href="#sharing">Details below.</a></li>
+      <li>You can <strong>download or delete everything</strong> yourself in Settings, under "Your data".</li>
+      <li>Finished tasks are <strong>deleted automatically after 90 days</strong>.</li>
+    </ul>
+  </section>
+
+  <ul class="toc" aria-label="Contents">
+    <li><a href="#who">Who runs this</a></li>
+    <li><a href="#collect">What we collect</a></li>
+    <li><a href="#sharing">Who gets it</a></li>
+    <li><a href="#device">Your computer and Chrome</a></li>
+    <li><a href="#storage">Cookies and storage</a></li>
+    <li><a href="#keep">How long we keep it</a></li>
+    <li><a href="#rights">Your rights</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="#more">Children, transfers, changes</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ul>
+
+  <h2 id="who">Who runs this</h2>
+  <p>Deskhand is a small, independent, non-commercial project (<a href="https://github.com/khanfawwaz/deskhand">github.com/khanfawwaz/deskhand</a>). The person who runs the Deskhand server is the one responsible for the data on it. For deskhand.fawwazkhan.dev that is the project's owner, running it on their own computer. If you run your own copy of the Deskhand server, you are the one responsible for it, and this policy is only a starting point for yours.</p>
+
+  <h2 id="collect">What we collect, and why</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>What</th><th>Why</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Your email address</td><td>To send you a sign-in link and recognise you when you come back. There are no passwords.</td><td>Kept, in a normalised form, with your workspace until you delete your account. The sign-in code itself is held in the server's memory for about 15 minutes and works once.</td></tr>
+        <tr><td>Your workspace and signed-in devices</td><td>To keep your things separate from everyone else's.</td><td>A workspace name, and a name for each phone or browser you sign in from. Only a scrambled (hashed) form of each sign-in token is stored.</td></tr>
+        <tr><td>Your computers</td><td>To send tasks to the right computer and show whether it is online.</td><td>The name you gave it, when it was last seen, and what it is able to do.</td></tr>
+        <tr><td>Your tasks</td><td>To run them, show them to you and let you review what happened.</td><td>What you asked, its status and result, and each step taken. Text typed into fields and the contents of files are removed before a step is stored; page addresses and search words stay in the step.</td></tr>
+        <tr><td>What Deskhand has learned</td><td>So it works better next time on the same app or site.</td><td>Short notes about how an app or site worked, and past task summaries. You can read and delete the notes in Settings.</td></tr>
+        <tr><td>Usage counts</td><td>To share the AI model fairly between people, apply daily limits, and keep costs under control.</td><td>How many model calls and how much text, per workspace, with the model's name and timing. Not the content.</td></tr>
+        <tr><td>Technical logs</td><td>To keep the service running and spot abuse.</td><td>The server and the front-door proxy keep standard logs (such as time, address of the request and your internet address). They are rotated automatically and kept for a short time, around two weeks at most.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>We do not collect your precise location, contacts, payment details or anything for advertising. Deskhand does not read or store your passwords.</p>
+
+  <h2 id="sharing">Who gets it</h2>
+  <p>We do not sell personal data, and we do not share it for advertising. Deskhand does rely on a few outside services to work. Each one only gets what it needs:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>What it receives</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>NVIDIA (AI model API)</td><td>Your instruction, text read from the pages and windows Deskhand is working in, a description or picture of the approved window, and the steps so far.</td><td>The AI model decides the next step. Deskhand does not store the pictures. NVIDIA's own terms and privacy policy apply to what it does with them.</td></tr>
+        <tr><td>Google (Gmail)</td><td>Your email address and the sign-in message.</td><td>To deliver the sign-in email.</td></tr>
+        <tr><td>Your browser's speech service</td><td>Your voice, <em>only</em> if you use the microphone button or the voice shortcut.</td><td>Speech-to-text is done by your browser's own service (for example Google for Chrome, Microsoft for Edge). Deskhand never receives or stores the audio, only the text.</td></tr>
+        <tr><td>Hosting and network</td><td>Encrypted traffic, plus standard connection logs.</td><td>The public address is served through a cloud server (Oracle Cloud) that forwards your traffic over an encrypted Tailscale link to the computer that runs Deskhand.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>We may also share information if the law requires it. Services can change; we will update this page when they do.</p>
+  <div class="note"><p><strong>Private by default.</strong> Deskhand only works on the apps, folders and websites you have approved, and asks you before a new website. It is built so that windows and pages outside those are not read or sent anywhere.</p></div>
+
+  <h2 id="device">Your computer and the Chrome extension</h2>
+  <ul>
+    <li><strong>The Deskhand app for Windows</strong> keeps its settings, a sign-in token for your computer and its own log on your computer. It acts only inside the approved apps, folders and websites in its safety rules.</li>
+    <li><strong>The Chrome extension collects nothing itself</strong> and sends nothing to us. It talks <strong>only to the Deskhand app on the same computer</strong> (never over the internet), makes no requests to the internet and loads no remote code. While a task you started is running, it passes that tab's address, title, visible text and links to the app on your computer and carries out the clicks and typing the app asks for. It does nothing until you press "Connect to Deskhand" and approve it in a window on your computer, and you can disconnect at any time. Chrome shows its standard "is debugging this browser" bar while it works.</li>
+    <li>What the extension is allowed to do: <code>debugger</code> (read the task's tab and click or type in it), <code>tabs</code> (find that tab and read its address and title), <code>alarms</code> (stay connected to the app on your computer) and <code>storage</code> (remember that you approved the connection). It does not ask for cookie access.</li>
+  </ul>
+
+  <h2 id="storage">Cookies and browser storage</h2>
+  <p>The Deskhand web app sets <strong>no cookies</strong>. It keeps three small items in your browser's local storage: <code>pilot.token</code> (keeps you signed in on this device), <code>pilot.targets</code> (which computers you picked) and <code>pilot.settings</code> (theme and preferences). Signing out removes the token. The app also stores its own files in your browser so it opens quickly and can start offline; that never includes your tasks. It loads nothing from other websites.</p>
+
+  <h2 id="keep">How long we keep it</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data</th><th>Kept for</th></tr></thead>
+      <tbody>
+        <tr><td>Finished tasks, their steps and measurements, and past-task summaries</td><td>90 days, then deleted automatically. Tasks still running are never deleted this way.</td></tr>
+        <tr><td>What Deskhand has learned (notes about apps and sites)</td><td>Until you delete them or delete your account.</td></tr>
+        <tr><td>Usage counts</td><td>400 days, then deleted automatically.</td></tr>
+        <tr><td>Email, workspace, computers and signed-in devices</td><td>Until you delete your account. Revoking a device or computer in Settings stops it working straight away.</td></tr>
+        <tr><td>Server and proxy logs</td><td>A short time (around two weeks at most), rotated automatically.</td></tr>
+        <tr><td>Backups, if any are made</td><td>Deleted within 30 days.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The person running a server can change the 90 and 400 day periods for their own server.</p>
+
+  <h2 id="rights">Your rights, and how to use them</h2>
+  <ul>
+    <li><strong>See and take your data:</strong> Settings, then "Your data", then "Download my data". You get one file with everything stored about you (never sign-in tokens, never anyone else's data).</li>
+    <li><strong>Delete your data:</strong> Settings, then "Your data", then "Delete my account and data". Anything running is stopped, then your tasks, computers, devices, learned notes, usage counts and workspace are erased for good.</li>
+    <li><strong>Correct it:</strong> you can rename your workspace and computers, and delete learned notes. To change your email, create a new account.</li>
+    <li><strong>Object, restrict or withdraw:</strong> you can stop at any time by signing out or deleting your account; voice input is optional and off until you use it. If you want something else done with your data, ask us.</li>
+    <li><strong>Complain:</strong> if you are in the EU, the UK or elsewhere with a data protection authority, you can complain to it. We would like the chance to help first.</li>
+  </ul>
+  <p>If you cannot use the in-app tools, ask through the contact below and we will answer within 30 days.</p>
+
+  <h2 id="security">How it is kept safe</h2>
+  <ul>
+    <li>Traffic to the server uses HTTPS. The link behind it between our servers is encrypted too.</li>
+    <li>No passwords exist to leak. Sign-in codes work once and expire (15 minutes for email links, 10 minutes for pairing), and wrong guesses are rate-limited.</li>
+    <li>Sign-in tokens are shown once and only a hash is stored. You can revoke any device or computer.</li>
+    <li>Every workspace is kept separate: asking for someone else's data answers "not found".</li>
+    <li>The safety rules (which apps, folders and sites are allowed, what needs your approval) are enforced by your computer and the server, <strong>not</strong> left to the AI model. Risky steps ask you first, and an emergency stop is always available in Settings.</li>
+  </ul>
+  <p>No service is perfectly secure. If something goes wrong that puts your data at risk, we will tell the people affected without undue delay.</p>
+
+  <h2 id="more">Children, other countries, and changes</h2>
+  <p><strong>Children.</strong> Deskhand is not meant for children under 13 (under 16 where the law sets that age). If you think a child has signed up, contact us and we will delete the account.</p>
+  <p><strong>Other countries.</strong> The server runs on a computer in the owner's home, and the services above (the AI model provider, email and speech services) may be in other countries, including the United States. By using Deskhand you understand your data can be processed there.</p>
+  <p><strong>Changes.</strong> If we change this policy we will update the date at the top, and tell signed-in people in the app when the change matters.</p>
+
+  <h2 id="contact">Contact</h2>
+  <p>Questions, requests or concerns about privacy: open an issue at <a href="https://github.com/khanfawwaz/deskhand/issues">github.com/khanfawwaz/deskhand/issues</a>. Please do not put private details in a public issue: say that you have a privacy request and we will arrange a private way to continue.</p>
+
+  <footer>Last updated 9 November 2026 · <a href="/terms">Terms of use</a> · <a href="/app/">Back to Deskhand</a></footer>
+</main>
+</body>
+</html>

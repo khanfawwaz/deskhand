@@ -3,190 +3,401 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07071D">
-  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1311" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Deskhand</title>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
+  <header id="topbar" class="topbar">
     <div class="brand"><span class="logo" aria-hidden="true"></span><h1>Deskhand</h1></div>
-    <div class="top-right">
-      <span id="conn" class="conn" data-state="offline" role="status" aria-live="polite">offline</span>
-      <button id="menuBtn" class="icon-btn" type="button" aria-label="Settings" hidden>
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
-      </button>
-    </div>
   </header>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <main>
-    <!-- 1. first run: sign in -->
-    <section id="pairView" hidden>
-      <div class="card hero" id="emailCard" hidden>
-        <h2>Welcome to Deskhand</h2>
-        <p class="lead">Tell your computer what to do, by voice or text, from anywhere. It does the clicking and typing for you.</p>
-        <ul class="perks">
-          <li>Works on your own computer, not in the cloud</li>
-          <li>Asks you first before anything risky</li>
-          <li>No password: we email you a sign-in link</li>
-        </ul>
-        <form id="emailForm" autocomplete="on">
-          <label>Your email
-            <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" required>
-          </label>
-          <button class="primary wide" type="submit" id="emailBtn">Email me a sign-in link</button>
-        </form>
-        <form id="verifyForm" autocomplete="off" hidden>
-          <p class="hint" id="sentNote">Check your inbox. Tap the link in the email, or type the code from it here.</p>
-          <label>Code from the email
-            <input id="vcode" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
-          </label>
-          <button class="primary wide" type="submit">Sign in</button>
-          <button class="link wide" type="button" id="resendBtn">Use a different email</button>
-        </form>
-        <p id="emailErr" class="err" role="alert"></p>
-        <button class="link" type="button" id="haveCodeBtn">I have a pairing code instead</button>
-      </div>
-      <div class="card" id="codeCard">
-        <h2>Connect this device</h2>
-        <p class="hint" id="noEmail" hidden>Sign-in by email is not switched on for this server yet. If you were given a code, enter it below. Otherwise ask whoever runs Deskhand to turn email sign-in on.</p>
-        <p class="hint">Enter the code shown on a device that is already set up (Settings, then Add a phone or computer), or an invite code you were sent. A code works once.</p>
-        <form id="pairForm" autocomplete="off">
-          <label>Code
-            <input id="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
-          </label>
-          <label>Name this device
-            <input id="devName" maxlength="40" placeholder="e.g. My phone" required>
-          </label>
-          <button class="primary wide" type="submit">Connect</button>
-          <p id="pairErr" class="err" role="alert"></p>
-        </form>
-      </div>
-    </section>
-
-    <!-- 2. the app -->
-    <section id="appView" hidden>
-      <div id="approval" class="approval" role="alertdialog" aria-labelledby="approvalTitle" hidden>
-        <div>
-          <strong id="approvalTitle">Deskhand needs your OK</strong>
-          <p id="approvalText"></p>
-          <p class="hint" id="approvalHint">Say "approve" or "deny", or tap a button.</p>
-        </div>
-        <div id="choices" class="choices" hidden></div>
-        <form id="answerForm" class="answer" hidden autocomplete="off">
-          <input id="answerText" maxlength="500" placeholder="Or type your own answer" aria-label="Your answer">
-          <button class="primary" type="submit">Send</button>
-        </form>
-        <div class="row" id="approvalBtns">
-          <button id="denyBtn" class="danger" type="button">Deny</button>
-          <button id="approveBtn" class="primary" type="button">Approve</button>
-        </div>
-      </div>
-
-      <section id="setup" class="card hero" hidden>
-        <h2>Connect your first computer</h2>
-        <p class="lead">Deskhand works on a Windows computer that has a small helper installed. It takes about a minute.</p>
-        <ol class="how">
-          <li>Press the button to get your one-line install command.</li>
-          <li>On the Windows computer, open <b>PowerShell</b> and paste it.</li>
-          <li>Wait: the computer appears here by itself.</li>
-        </ol>
-        <button id="getCmdBtn" class="primary wide" type="button">Get my install command</button>
-        <div id="setupCmd" hidden>
-          <code id="setupCmdText" class="cmd"></code>
-          <button id="setupCopy" class="wide" type="button">Copy command</button>
-          <p class="hint waiting"><span class="pulse" aria-hidden="true"></span>Waiting for your computer to connect. The command works once, for 15 minutes.</p>
-        </div>
-        <p id="setupErr" class="err" role="alert"></p>
-      </section>
-
-      <form id="composer" class="composer card" autocomplete="off">
-        <div class="target">
-          <span class="lbl" id="targetsLbl">Run on</span>
-          <div id="targets" class="targets" role="group" aria-labelledby="targetsLbl"></div>
-        </div>
-        <p id="targetNote" class="hint" aria-live="polite"></p>
-        <textarea id="goal" rows="3" maxlength="4000" placeholder="What should I do? For example: open Notepad and write a shopping list." aria-label="Command"></textarea>
-        <div id="examples" class="chips" aria-label="Examples"></div>
-        <div class="row">
-          <button id="micBtn" class="mic" type="button" aria-pressed="false" aria-label="Speak a command">
-            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z"/></svg>
-          </button>
-          <button id="sendBtn" class="primary grow" type="submit">Run</button>
-        </div>
-        <p id="voiceLine" class="hint" aria-live="polite"></p>
+  <!-- 1. first run: sign in -->
+  <main id="pairView" class="pair" hidden>
+    <div class="card hero" id="emailCard" hidden>
+      <h2>Welcome to Deskhand</h2>
+      <p class="lead">Tell your computer what to do, by voice or text, from anywhere. It does the clicking and typing for you.</p>
+      <ul class="perks">
+        <li>Works on your own computer, not in the cloud</li>
+        <li>Asks you first before anything risky</li>
+        <li>No password: we email you a sign-in link</li>
+      </ul>
+      <form id="emailForm" autocomplete="on">
+        <label>Your email
+          <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" required>
+        </label>
+        <button class="primary wide" type="submit" id="emailBtn">Email me a sign-in link</button>
       </form>
-
-      <section id="current" class="card" hidden aria-live="polite">
-        <div class="card-head">
-          <span id="chip" class="chip">Working</span>
-          <span id="elapsed" class="hint"></span>
-        </div>
-        <p id="curGoal" class="goal"></p>
-        <ol id="steps" class="steps"></ol>
-        <div id="resultBox" class="result" hidden>
-          <div class="card-head"><strong>Result</strong><button id="copyBtn" class="link" type="button">Copy</button></div>
-          <pre id="result"></pre>
-        </div>
-        <p id="errorLine" class="err" hidden></p>
-        <button id="stopBtn" class="danger wide" type="button" hidden>Stop this task</button>
-      </section>
-
-      <section class="card">
-        <h2>Recent</h2>
-        <ul id="history" class="history"></ul>
-        <p id="emptyHistory" class="hint">Nothing yet. Tasks you run will show up here so you can look back at them.</p>
-      </section>
-    </section>
+      <form id="verifyForm" autocomplete="off" hidden>
+        <p class="hint" id="sentNote">Check your inbox. Tap the link in the email, or type the code from it here.</p>
+        <label>Code from the email
+          <input id="vcode" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
+        </label>
+        <button class="primary wide" type="submit">Sign in</button>
+        <button class="link wide" type="button" id="resendBtn">Use a different email</button>
+      </form>
+      <p id="emailErr" class="err" role="alert"></p>
+      <button class="link" type="button" id="haveCodeBtn">I have a pairing code instead</button>
+    </div>
+    <div class="card" id="codeCard">
+      <h2>Connect this device</h2>
+      <p class="hint" id="noEmail" hidden>Sign-in by email is not switched on for this server yet. If you were given a code, enter it below. Otherwise ask whoever runs Deskhand to turn email sign-in on.</p>
+      <p class="hint">Enter the code shown on a device that is already set up (Settings, then Add a phone or computer), or an invite code you were sent. A code works once.</p>
+      <form id="pairForm" autocomplete="off">
+        <label>Code
+          <input id="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH" required>
+        </label>
+        <label>Name this device
+          <input id="devName" maxlength="40" placeholder="e.g. My phone" required>
+        </label>
+        <button class="primary wide" type="submit">Connect</button>
+        <p id="pairErr" class="err" role="alert"></p>
+      </form>
+    </div>
+    <p class="legal-links">By signing in you agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a>.
+      Read how your data is handled in the <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</p>
   </main>
+
+  <!-- 2. the app: sidebar + conversation -->
+  <div id="appView" class="shell" hidden>
+    <div id="scrim" class="scrim" hidden></div>
+
+    <aside id="sidebar" class="sidebar" aria-label="Deskhand navigation">
+      <button id="wsBtn" class="ws" type="button" aria-label="Workspace and settings">
+        <span class="logo" aria-hidden="true"></span>
+        <span id="wsName" class="ws-name">Deskhand</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+
+      <nav class="side-nav">
+        <button id="newChatBtn" class="nav-item" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          New task
+        </button>
+        <button id="skillsBtn" class="nav-item" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          What it has learned
+        </button>
+      </nav>
+
+      <section class="side-section" aria-labelledby="compLbl">
+        <h3 id="compLbl">Computers</h3>
+        <ul id="sideComputers" class="side-computers"></ul>
+        <button id="sideAddBtn" class="nav-item small" type="button">Add a computer</button>
+      </section>
+
+      <section class="side-section grow" aria-labelledby="recLbl">
+        <h3 id="recLbl">Recents</h3>
+        <ul id="history" class="history"></ul>
+        <p id="emptyHistory" class="hint">Tasks you run will show up here.</p>
+      </section>
+
+      <button id="menuBtn" class="user" type="button" aria-label="Settings">
+        <span id="avatar" class="avatar" aria-hidden="true">D</span>
+        <span class="user-text"><span id="userName" class="user-name">Signed in</span><span id="userSub" class="user-sub">Settings</span></span>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </aside>
+
+    <section class="main">
+      <header class="chat-top">
+        <button id="sideToggle" class="icon-btn menu-toggle" type="button" aria-label="Open menu" aria-controls="sidebar">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <h2 id="chatTitle" class="chat-title">New task</h2>
+        <span id="conn" class="conn" data-state="offline" role="status" aria-live="polite">offline</span>
+        <button id="deleteChatBtn" class="ghost small chat-del" type="button" hidden>
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Delete this chat
+        </button>
+      </header>
+
+      <!-- a computer is online but its Chrome extension is not connected: a small, dismissible tip -->
+      <div id="extBanner" class="banner" hidden>
+        <div class="banner-text">
+          <b>Tip: use your own Chrome</b>
+          <span>Install the Deskhand extension so you don't have to sign in to YouTube or Netflix again.</span>
+        </div>
+        <span id="extBannerSoon" class="pill">Coming soon</span>
+        <a id="extBannerLink" class="pill pill-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Add to Chrome</a>
+        <button id="extBannerClose" class="icon-btn" type="button" aria-label="Dismiss">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="thread" class="thread" tabindex="-1">
+        <div class="col">
+          <!-- nothing selected yet -->
+          <section id="welcome" class="welcome">
+            <canvas id="orb" class="orb" width="260" height="260" aria-hidden="true"></canvas>
+            <h2>What should I do?</h2>
+            <p class="hint">Tell Deskhand a task in your own words. It works on your computer and asks you when it needs to.</p>
+            <div id="examples" class="chips" aria-label="Examples"></div>
+
+
+            <div id="setup" class="setup" hidden>
+              <h3>No computer connected yet</h3>
+              <p class="lead">Deskhand does its work on a Windows computer. Connect one to get started. It takes about a minute.</p>
+              <button id="getCmdBtn" class="primary" type="button">Connect a computer</button>
+            </div>
+          </section>
+
+          <!-- earlier turns of the open chat (each follow-up is a task; the newest one is below) -->
+          <div id="earlier" class="earlier" hidden></div>
+
+          <!-- one task as a conversation -->
+          <section id="current" class="convo" hidden aria-live="polite">
+            <div class="bubble user-bubble"><p id="curGoal" class="goal"></p></div>
+
+            <div class="assistant">
+              <div class="status-line">
+                <span id="spin" class="spin" aria-hidden="true"></span>
+                <span id="elapsed" class="elapsed"></span>
+                <span id="chip" class="chip">Working</span>
+              </div>
+              <details id="stepsBox" class="steps-box">
+                <summary id="stepsSummary">Thinking…</summary>
+                <ol id="steps" class="steps"></ol>
+              </details>
+
+              <div id="qa" class="qa"></div>
+
+              <!-- a question or a request for permission, answered with buttons like in any chat app -->
+              <div id="approval" class="ask" role="alertdialog" aria-labelledby="approvalTitle" hidden>
+                <strong id="approvalTitle" class="ask-title">Deskhand needs your OK</strong>
+                <p id="approvalText" class="ask-text"></p>
+                <div id="choices" class="choices" hidden></div>
+                <form id="answerForm" class="answer" hidden autocomplete="off">
+                  <input id="answerText" maxlength="500" placeholder="Something else…" aria-label="Your own answer">
+                  <button class="send-mini" type="submit" aria-label="Send answer">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </form>
+                <div class="row" id="approvalBtns">
+                  <button id="denyBtn" class="ghost" type="button">Deny</button>
+                  <button id="approveBtn" class="primary" type="button">Approve</button>
+                </div>
+                <p class="hint" id="approvalHint">Say "approve" or "deny", or tap a button.</p>
+              </div>
+
+              <div id="resultBox" class="answer-box" hidden>
+                <pre id="result" class="result"></pre>
+                <div class="result-actions"><button id="copyBtn" class="link" type="button">Copy</button></div>
+              </div>
+              <p id="errorLine" class="err" hidden></p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="composer-wrap">
+        <form id="composer" class="composer" autocomplete="off">
+          <textarea id="goal" rows="1" maxlength="4000" placeholder="Ask Deskhand to do something…" aria-label="Command"></textarea>
+          <div class="composer-row">
+            <div class="target-wrap">
+              <button id="targetBtn" class="target-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Choose which computer">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span id="targetLabel">Choose a computer</span>
+              </button>
+              <div id="targetPop" class="pop" hidden>
+                <span class="lbl" id="targetsLbl">Run on</span>
+                <div id="targets" class="targets" role="group" aria-labelledby="targetsLbl"></div>
+                <p id="targetNote" class="hint" aria-live="polite"></p>
+              </div>
+            </div>
+            <span class="spacer"></span>
+            <button id="micBtn" class="round ghost-round" type="button" aria-pressed="false" aria-label="Speak a command">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <!-- while a task is running this takes the place of the send button -->
+            <button id="stopBtn" class="round stop-round" type="button" hidden aria-label="Stop the task" title="Stop">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>
+            </button>
+            <button id="sendBtn" class="round send" type="submit" aria-label="Run">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </form>
+        <p id="voiceLine" class="hint voice-line" aria-live="polite"></p>
+      </div>
+    </section>
+  </div>
+
+  <!-- shown by itself after sign-in when no computer is connected yet, and from Settings > Connect a computer -->
+  <dialog id="connectDlg" aria-labelledby="connectTitle">
+    <div class="menu connect">
+      <h2 id="connectTitle">Connect your computer</h2>
+      <div id="connectStep1">
+      <p class="lead">Deskhand does its work on a Windows computer. Install its small helper once, it takes about a minute.</p>
+
+      <ol class="stepcards">
+        <li class="stepcard">
+          <span class="num">1</span>
+          <div class="body">
+            <b>Copy your install command</b>
+            <code id="connectCmd" class="cmd">Getting your command…</code>
+            <button id="connectCopy" type="button" class="primary wide" disabled>Copy command</button>
+          </div>
+        </li>
+        <li class="stepcard">
+          <span class="num">2</span>
+          <div class="body"><b>Open PowerShell on that computer</b>
+            <p class="hint">Press the Windows key, type <i>PowerShell</i>, press Enter.</p></div>
+        </li>
+        <li class="stepcard">
+          <span class="num">3</span>
+          <div class="body"><b>Paste it and press Enter</b>
+            <p class="hint">This page notices by itself when the computer is ready.</p></div>
+        </li>
+      </ol>
+
+      <div id="connectStatus" class="statusbox" data-state="waiting" role="status" aria-live="polite">
+        <span class="spin" aria-hidden="true"></span><span id="connectStatusText">Waiting for your computer…</span>
+      </div>
+      <p id="connectErr" class="err" role="alert"></p>
+      <div class="row">
+        <button id="connectLater" type="button" class="ghost">Not now</button>
+        <button id="connectNew" type="button" class="ghost">Get a new command</button>
+      </div>
+      </div>
+
+      <!-- step 2, once the computer is connected: use the person's own Chrome -->
+      <div id="connectStep2" hidden>
+        <p class="lead">Your computer is connected. One more thing, so Deskhand can use your own Chrome:</p>
+        <div class="extcard">
+          <b>Use your own Chrome</b>
+          <p class="hint ext-why">Install the Deskhand Chrome extension so Deskhand can work in the Chrome you already use, where you are signed in to YouTube, Netflix and more. Without it Deskhand uses a separate browser profile and you would have to sign in to each site again.</p>
+          <div id="extStepStatus" class="statusbox" data-state="soon" role="status" aria-live="polite">
+            <span class="spin" aria-hidden="true"></span><span id="extStepText">Coming soon</span>
+          </div>
+          <a id="extStepLink" class="primary wide extlink" href="#" target="_blank" rel="noopener noreferrer" hidden>Add to Chrome</a>
+        </div>
+        <div class="row">
+          <button id="extSkip" type="button" class="ghost">Skip for now</button>
+          <button id="extDone" type="button" class="primary">Done</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="menu">
     <form method="dialog" class="menu">
       <h2>Settings</h2>
 
-      <h3 class="sec">Your computers</h3>
-      <ul id="computers" class="list"></ul>
-      <button id="addLaptopBtn" type="button" class="wide">Add a Windows computer</button>
-      <div id="addLaptop" hidden>
-        <p class="hint">On that computer, open PowerShell and paste this line. It works once, for 15 minutes.</p>
-        <code id="addCmd" class="cmd"></code>
-        <button id="copyCmd" type="button" class="wide">Copy</button>
-      </div>
+      <section class="box">
+        <h3>Your computers</h3>
+        <p class="hint">Windows computers that Deskhand works on.</p>
+        <ul id="computers" class="list"></ul>
+        <button id="addLaptopBtn" type="button" class="wide primary">Connect a computer</button>
+      </section>
 
-      <h3 class="sec">Phones and computers you control from</h3>
-      <p class="hint" id="wsLine"></p>
-      <ul id="members" class="list"></ul>
-      <button id="addControllerBtn" type="button" class="wide">Add another phone or computer</button>
-      <div id="addController" hidden>
-        <p class="hint">Open Deskhand on the new device and enter this code. It works once, for 10 minutes.</p>
-        <code id="ctrlCode" class="cmd big"></code>
-      </div>
+      <section class="box" id="extBox">
+        <h3>Chrome extension</h3>
+        <p class="hint">Lets Deskhand work in your own Chrome, where you are already signed in to YouTube, Netflix and more. Without it Deskhand uses a separate browser profile and you would have to sign in to each site again.</p>
+        <ul id="extList" class="list"></ul>
+        <p id="extSoon" class="extsoon">Coming soon</p>
+        <a id="extLink" class="primary wide extlink" href="#" target="_blank" rel="noopener noreferrer" hidden>Add to Chrome</a>
+      </section>
 
-      <h3 class="sec">What Deskhand has learned</h3>
-      <p class="hint">After each task it keeps notes on how each app or site worked, and uses them next time.</p>
-      <ul id="skills" class="list"></ul>
+      <section class="box">
+        <h3>Use Deskhand from other devices</h3>
+        <p class="hint" id="wsLine">Open this site on another phone or computer and enter a code to give commands from there.</p>
+        <ul id="members" class="list"></ul>
+        <button id="addControllerBtn" type="button" class="wide">Get a code for another device</button>
+        <div id="addController" hidden>
+          <p class="hint">Open Deskhand on that device and enter this code. It works once, for 10 minutes.</p>
+          <code id="ctrlCode" class="cmd big"></code>
+        </div>
+      </section>
 
-      <h3 class="sec">Preferences</h3>
-      <label class="check"><input type="checkbox" id="optAuto"> Send voice commands automatically (2 s to cancel)</label>
-      <label class="check"><input type="checkbox" id="optSpeak"> Read results aloud</label>
-      <label class="check"><input type="checkbox" id="optNotify"> Alert me when Deskhand needs approval</label>
-      <button id="installBtn" type="button" class="wide" hidden>Install the app on this device</button>
-      <p id="iosHint" class="hint" hidden>On iPhone/iPad: tap Share, then "Add to Home Screen".</p>
+      <section class="box">
+        <h3>Appearance</h3>
+        <div id="themeSeg" class="seg" role="group" aria-label="Theme">
+          <button type="button" id="themeAuto" aria-pressed="true">Match system</button>
+          <button type="button" id="themeLight" aria-pressed="false">Light</button>
+          <button type="button" id="themeDark" aria-pressed="false">Dark</button>
+        </div>
+      </section>
 
-      <h3 class="sec">Safety</h3>
-      <button id="estopBtn" type="button" class="danger wide">Emergency stop (all tasks)</button>
-      <p class="hint" id="whoami"></p>
-      <button id="unpairBtn" type="button" class="wide">Sign out of this device</button>
+      <section class="box">
+        <h3>Preferences</h3>
+        <label class="check"><input type="checkbox" id="optAuto"> Send voice commands automatically (2 s to cancel)</label>
+        <label class="check"><input type="checkbox" id="optSpeak"> Read results aloud</label>
+        <label class="check"><input type="checkbox" id="optNotify"> Alert me when Deskhand needs approval</label>
+        <button id="installBtn" type="button" class="wide" hidden>Add Deskhand to this device's home screen</button>
+        <p id="iosHint" class="hint" hidden>On iPhone/iPad: tap Share, then "Add to Home Screen".</p>
+      </section>
+
+      <section class="box">
+        <h3>Usage today</h3>
+        <p id="usageLine" class="hint">Loading…</p>
+      </section>
+
+      <section class="box" id="prefsBox">
+        <h3>Your preferences</h3>
+        <p class="hint">Rules you asked Deskhand to remember, like “when I say calming music, play lofi”. Add one by saying “set it as a preference” in a message. Deskhand saves it and does nothing else.</p>
+        <ul id="prefs" class="list"></ul>
+        <p id="prefsEmpty" class="hint">None yet.</p>
+      </section>
+
+      <details class="box" id="skillsSec">
+        <summary><h3>What Deskhand has learned</h3></summary>
+        <p class="hint">After each task it keeps notes on how each app or site worked, and uses them next time.</p>
+        <ul id="skills" class="list"></ul>
+      </details>
+
+      <section class="box" id="dataBox">
+        <h3>Your data</h3>
+        <p class="hint">It is yours. Take a copy of everything Deskhand has stored about you, or erase it all. Finished tasks are also deleted automatically after 90 days.</p>
+        <button id="exportBtn" type="button" class="wide">Download my data</button>
+        <button id="deleteChatsBtn" type="button" class="wide">Delete all chats</button>
+        <button id="deleteBtn" type="button" class="danger wide">Delete my account and data…</button>
+        <p id="dataMsg" class="hint" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="box">
+        <h3>Account and safety</h3>
+        <p class="hint" id="whoami"></p>
+        <button id="estopBtn" type="button" class="danger wide">Emergency stop (all tasks)</button>
+        <button id="unpairBtn" type="button" class="wide">Sign out of this device</button>
+        <p class="hint legal-links"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a></p>
+      </section>
+
       <button class="primary wide" value="close">Done</button>
+    </form>
+  </dialog>
+
+  <!-- type-to-confirm: erasing an account cannot be undone -->
+  <dialog id="deleteDlg" aria-labelledby="deleteTitle">
+    <form id="deleteForm" class="menu" autocomplete="off">
+      <h2 id="deleteTitle">Delete your account and data?</h2>
+      <p class="lead">This erases everything Deskhand has stored about you, for good:</p>
+      <ul class="perks">
+        <li>your tasks, their steps and results</li>
+        <li>your connected computers and signed-in devices (they will be signed out)</li>
+        <li>what Deskhand has learned, your usage counts and your workspace</li>
+      </ul>
+      <p class="hint">Anything running is stopped first. It cannot be undone. Tip: download your data first.</p>
+      <label>Type <b>delete my data</b> to confirm
+        <input id="deleteConfirm" placeholder="delete my data" autocomplete="off" spellcheck="false">
+      </label>
+      <p id="deleteErr" class="err" role="alert"></p>
+      <div class="row">
+        <button id="deleteCancel" type="button" class="ghost">Cancel</button>
+        <button id="deleteGo" type="submit" class="danger" disabled>Delete everything</button>
+      </div>
     </form>
   </dialog>
 
   <script src="logic.js"></script>
   <script src="app.js"></script>
+  <script src="orb.js"></script>
 </body>
 </html>

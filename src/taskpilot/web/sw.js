@@ -1,8 +1,8 @@
 /* Deskhand service worker: makes the app installable and its shell load instantly/offline.
    It NEVER caches the API: tasks, tokens and results always come live from the server. */
-const VERSION = 'deskhand-shell-v12';
+const VERSION = 'deskhand-shell-v20';
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'style.css', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png'];
+  'icons/icon-192.png', 'icons/icon-512.png', 'orb.js', 'theme.js', 'privacy.html', 'terms.html', 'legal.css'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

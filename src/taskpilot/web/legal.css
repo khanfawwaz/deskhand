@@ -1,0 +1,63 @@
+/* Shared look of the privacy policy and the terms: the same light green-and-white palette as the app, with dark mode. */
+:root {
+  color-scheme: light dark;
+  --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F2F4F3; --line: #DCE1DE; --bubble: #DBE5DD;
+  --text: #12241d; --muted: #5d6d65; --accent: #3d6b52; --leaf: #1BC237; --mint: #6ED987;
+  --radius: 16px; --shadow: 0 1px 2px rgba(18,36,29,.05), 0 6px 22px rgba(18,36,29,.06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f1311; --surface: #1a201d; --surface-2: #212825; --line: #2b342f; --bubble: #26302b;
+    --text: #e9eeeb; --muted: #a2b1a8; --accent: #9fc9ae; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35); }
+}
+:root[data-theme="dark"] { --bg: #0f1311; --surface: #1a201d; --surface-2: #212825; --line: #2b342f; --bubble: #26302b;
+  --text: #e9eeeb; --muted: #a2b1a8; --accent: #9fc9ae; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35); }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 var(--font); }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .8rem; padding: .7rem 1.2rem;
+       background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.top .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; color: var(--text); text-decoration: none; }
+.top .logo { width: 30px; height: 30px; border-radius: 8px; background: url(icons/icon-192.png) center / cover no-repeat; }
+.top nav { margin-left: auto; display: flex; gap: .3rem; flex-wrap: wrap; }
+.top nav a { padding: .3rem .8rem; border-radius: 999px; text-decoration: none; color: var(--muted); font-size: .95rem; }
+.top nav a:hover, .top nav a[aria-current="page"] { background: var(--surface-2); color: var(--text); }
+
+main { max-width: 780px; margin: 0 auto; padding: 2.2rem 1.2rem 5rem; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.5rem); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 .4rem; }
+h2 { font-size: 1.35rem; margin: 2.6rem 0 .5rem; letter-spacing: -.01em; scroll-margin-top: 4.5rem; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .2rem; }
+p, li { color: var(--muted); } li { margin: .35rem 0; } strong, b { color: var(--text); }
+ul { padding-left: 1.3rem; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: .88em; color: var(--text); }
+.date { color: var(--muted); font-size: .95rem; margin: 0 0 1.4rem; }
+
+.glance { background: var(--bubble); border-radius: var(--radius); padding: 1.1rem 1.3rem; margin: 1.2rem 0 1.6rem; }
+.glance h2 { margin: 0 0 .4rem; font-size: 1.1rem; }
+.glance li { color: var(--text); }
+.toc { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; margin: 0 0 .5rem; }
+.toc a { display: block; padding: .3rem .8rem; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: .9rem; color: var(--text); background: var(--surface); }
+.toc a:hover { background: var(--surface-2); }
+
+.table-wrap { overflow-x: auto; margin: .8rem 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .95rem; }
+th, td { text-align: left; vertical-align: top; padding: .7rem .9rem; border-bottom: 1px solid var(--line); color: var(--muted); }
+th { color: var(--text); background: var(--surface-2); font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--text); font-weight: 600; }
+
+.note { border-left: 4px solid var(--leaf); background: var(--surface-2); padding: .7rem 1rem; border-radius: 0 12px 12px 0; margin: 1rem 0; }
+.note p { margin: 0; }
+footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .92rem; }
+
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .top { padding: .6rem .8rem; } .top .brand span.name { display: none; }
+  main { padding-top: 1.4rem; }
+}

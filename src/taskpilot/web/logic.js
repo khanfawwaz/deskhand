@@ -47,6 +47,10 @@
     'scroll': ['Scrolled', 'scroll'], 'wait': ['Waited', 'wait'], 'run_command': ['Ran a command', 'run a command'],
     'files.read': ['Read a file', 'read a file'], 'files.write': ['Wrote a file', 'write a file'], 'files.list': ['Listed a folder', 'list a folder'],
     'clipboard.set': ['Copied text', 'copy text'], 'clipboard.get': ['Read the clipboard', 'read the clipboard'],
+    'web.open': ['Opened a web page', 'open a web page'], 'web.links': ['Looked at the links on the page', 'look at the links on the page'],
+    'web.click': ['Clicked on the page', 'click on the page'], 'web.search': ['Searched the site', 'search the site'],
+    'web.url': ['Checked the address', 'check the address'], 'web.read': ['Read the page', 'read the page'],
+    'browser.current_url': ['Checked the address', 'check the address'],
     'invalid': ['Rethought a step', 'rethink a step'],
   };
   const PENDING = new Set(['pending_confirmation']);
@@ -95,6 +99,25 @@
   const normalizeCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const prettyCode = (s) => { const c = normalizeCode(s).slice(0, 8); return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
 
+  /** Chats are threads of tasks: tasks that continue one another share `thread` (the id of the first one).
+   *  Returns one entry per chat, newest activity first: { thread, tasks (oldest first), root, latest, title }. */
+  function groupChats(tasks) {
+    const by = new Map();
+    for (const t of tasks || []) {
+      const k = t.thread || t.id;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(t);
+    }
+    return [...by.entries()].map(([thread, ts]) => {
+      ts.sort((a, b) => a.created_at - b.created_at);
+      const root = ts.find((x) => x.id === thread) || ts[0];
+      return { thread, tasks: ts, root, latest: ts[ts.length - 1], title: root.goal };
+    }).sort((a, b) => b.latest.created_at - a.latest.created_at);
+  }
+
+  /** The task a new message continues: the open chat's latest task, but only once it has finished. */
+  const continueTarget = (task) => (task && task.terminal ? task.id : null);
+
   return { norm, interpretVoice, tidyGoal, describeStep, statusLabel, statusTone, elapsedText, approvalText,
-    normalizeCode, prettyCode, friendlyError };
+    normalizeCode, prettyCode, friendlyError, groupChats, continueTarget };
 });
