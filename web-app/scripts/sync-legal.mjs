@@ -1,7 +1,6 @@
 // Copies the words of the privacy policy and the terms from the server's pages (src/taskpilot/web/*.html, the one source
 // of the text) into the React app (src/features/legal/content/*.html). Run after editing either page:
 //   node scripts/sync-legal.mjs          (a unit test fails when the copies are out of step)
-/* global process, console */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -40,3 +40,13 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 .row { display: flex; gap: .6rem; align-items: center; margin-top: .8rem; } .row > * { flex: 1; }
 .legal-links { text-align: center; color: var(--muted); font-size: .84rem; margin: 1rem auto 0; max-width: 28rem; }
 .legal-links a { color: var(--accent); text-underline-offset: 3px; }
+
+/* While a dialog is open the page behind it must not scroll or shift (no scrollbar popping in and out). */
+html:has(dialog[open]) { overflow: hidden; }
+
+/* No scrollbars anywhere: areas still scroll (wheel, touch, keys), they just never show a bar. Scrolling glides,
+   and stops at the edge of the area instead of dragging the page behind it. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
+html, * { scroll-behavior: smooth; overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) { html, * { scroll-behavior: auto; } }

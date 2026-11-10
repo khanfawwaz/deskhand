@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommandPalette } from './CommandPalette';
 import { DeviceOrbit } from './DeviceOrbit';
-import { filterActions, matchesHotkey, MAX_PODS, orbitPositions } from './orbit';
+import { driftOffset, filterActions, matchesHotkey, MAX_PODS, networkLayout, orbitPositions } from './orbit';
 import { useTypewriter } from './useTypewriter';
 
 describe('orbitPositions', () => {
@@ -23,6 +23,16 @@ describe('orbitPositions', () => {
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
     expect(orbitPositions(40, 160)).toHaveLength(MAX_PODS);
     expect(orbitPositions(0, 160)).toEqual([]);
+  });
+});
+
+describe('orbitPositions on a wide, staggered arc', () => {
+  it('gives every name room: neighbours are far apart, or at clearly different heights', () => {
+    const pts = orbitPositions(6, 230, 140, 1.2);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!, b = pts[i]!;
+      expect(Math.abs(a.x - b.x) > 125 || Math.abs(a.y - b.y) > 40).toBe(true);
+    }
   });
 });
 
@@ -74,15 +84,31 @@ describe('DeviceOrbit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Connect a computer' }));
     expect(onConnect).toHaveBeenCalledOnce();
   });
-  it('collapses a long list into a "+N" pod and sends a spark only to chosen computers', () => {
+  it('draws every computer: extra ones grow outwards, each tied to a computer on the ring inside', () => {
     const many = Array.from({ length: 9 }, (_, i) => ({ device_id: 'd' + i, name: 'PC ' + i, online: true }));
-    const { container, rerender } = render(<DeviceOrbit devices={many} selected={['d0', 'd2']} onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
-    expect(screen.getAllByRole('button')).toHaveLength(MAX_PODS - 1);
-    expect(screen.getByText('+4')).toBeInTheDocument();
+    const { container, rerender } = render(<DeviceOrbit devices={many} selected={['d0', 'd7']} onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
+    expect(screen.getAllByRole('button')).toHaveLength(9);
+    expect(screen.queryByText(/^\+\d/)).toBeNull();
     expect(container.querySelectorAll('[class*="spark"]')).toHaveLength(0);
-    rerender(<DeviceOrbit devices={many} selected={['d0', 'd2']} pulse={1} mood="working" onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
+    rerender(<DeviceOrbit devices={many} selected={['d0', 'd7']} pulse={1} mood="working" onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
     expect(container.querySelectorAll('[class*="spark"]')).toHaveLength(2);
     expect(screen.getByRole('group')).toHaveAttribute('data-mood', 'working');
+  });
+});
+
+describe('networkLayout', () => {
+  it('puts the first ring on the orb and ties each extra computer to its nearest one on the ring inside', () => {
+    const nodes = networkLayout(9, 230, 140, 6);
+    expect(nodes).toHaveLength(9);
+    expect(nodes.slice(0, 6).every((p) => p.parent === -1)).toBe(true);
+    for (const p of nodes.slice(6)) {
+      expect(p.parent).toBeGreaterThanOrEqual(0);
+      expect(p.parent).toBeLessThan(6);
+      expect(p.y).toBeLessThan(0);
+      expect(Math.hypot(p.x, p.y)).toBeGreaterThan(Math.hypot(nodes[p.parent]!.x, nodes[p.parent]!.y));
+    }
+    expect(networkLayout(3, 200, 140, 6).every((p) => p.parent === -1)).toBe(true);
+    expect(networkLayout(30, 200, 140, 4)).toHaveLength(30); // never a "+N": a third ring if it must
   });
 });
 
@@ -127,5 +153,53 @@ describe('useTypewriter', () => {
     expect(result.current).toBe('Open Notepad');
     rerender({ on: false });
     expect(result.current).toBe('');
+  });
+});
+
+describe('driftOffset', () => {
+  it('is gentle: never far from the resting place, and different for every computer', () => {
+    for (let i = 0; i < 6; i++) {
+      for (let t = 0; t < 120; t += 0.5) {
+        const o = driftOffset(i, t);
+        expect(Math.abs(o.x)).toBeLessThan(16 * 1.46 + 0.1);
+        expect(Math.abs(o.y)).toBeLessThan(16 * 1.46 + 0.1);
+      }
+    }
+    expect(driftOffset(0, 12)).not.toEqual(driftOffset(1, 12));
+    expect(driftOffset(2, 5)).toEqual(driftOffset(2, 5)); // same moment, same place: nothing random
+  });
+  it('really moves, slowly: a second later it is close by, a few seconds later it has wandered', () => {
+    const a = driftOffset(1, 10), b = driftOffset(1, 11), c = driftOffset(1, 18);
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(12);
+    expect(Math.hypot(a.x - c.x, a.y - c.y)).toBeGreaterThan(3);
+  });
+});
+
+describe('DeviceOrbit drifting', () => {
+  const devices = [{ device_id: 'a', name: 'Laptop', online: true }, { device_id: 'b', name: 'Office PC', online: true }];
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('the computers wander slowly and the line to the orb follows each one', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
+    const { container } = render(<DeviceOrbit devices={devices} selected={['a']} onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
+    const pod = screen.getByRole('button', { name: /Laptop/ });
+    const line = container.querySelector('line') as SVGLineElement;
+    const before = line.getAttribute('x2');
+    act(() => void vi.advanceTimersByTime(3000));
+    expect(pod.style.getPropertyValue('--dx')).toMatch(/px$/);
+    expect(line.getAttribute('x2')).not.toBe(before);
+    const dx = parseFloat(pod.style.getPropertyValue('--dx'));
+    const wireMove = Math.abs(parseFloat(line.getAttribute('x2') as string) - parseFloat(before as string));
+    expect(Math.abs(dx)).toBeLessThan(26);
+    expect(wireMove).toBeLessThan(40);
+  });
+
+  it('people who ask for less motion get computers that stay where they are', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    render(<DeviceOrbit devices={devices} selected={[]} onToggle={() => {}} onConnect={() => {}}><i>orb</i></DeviceOrbit>);
+    const pod = screen.getByRole('button', { name: /Laptop/ });
+    act(() => void vi.advanceTimersByTime(3000));
+    expect(pod.style.getPropertyValue('--dx')).toBe('');
   });
 });

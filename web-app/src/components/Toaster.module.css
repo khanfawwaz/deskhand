@@ -1,0 +1,4 @@
+.stack { position: fixed; left: 50%; bottom: calc(6.5rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; display: grid; gap: .5rem;
+  justify-items: center; width: min(90vw, 460px); pointer-events: none; }
+.toast { pointer-events: auto; border: 0; text-align: center; background: var(--primary); color: var(--primary-ink); padding: .6rem 1rem; border-radius: 12px;
+  box-shadow: var(--shadow); max-width: 100%; overflow-wrap: anywhere; }

@@ -1,0 +1,151 @@
+.wrap {
+  padding: 0.3rem 1.1rem calc(env(safe-area-inset-bottom) + 0.8rem);
+}
+.composer {
+  width: 100%;
+  max-width: 740px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 0.8rem 1rem 0.6rem;
+}
+.composer:focus-within {
+  border-color: var(--stone);
+}
+.composer textarea {
+  border: 0;
+  padding: 0.2rem 0.2rem 0.5rem;
+  resize: none;
+  background: transparent;
+  max-height: 10rem;
+  min-height: 1.6rem;
+  line-height: 1.5;
+  outline: none;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.spacer {
+  flex: 1;
+}
+.round {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.mic {
+  background: transparent;
+  color: var(--muted);
+}
+.mic:hover {
+  background: var(--surface-2);
+}
+.mic[aria-pressed='true'] {
+  background: var(--bad);
+  color: #fff;
+}
+.send {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.stop {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.stop:hover {
+  opacity: 0.85;
+}
+.targetWrap {
+  position: relative;
+  min-width: 0;
+}
+.targetBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.88rem;
+  color: var(--text);
+  max-width: 100%;
+}
+.targetBtn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+.pop {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 10;
+  width: min(320px, 80vw);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.8rem;
+  box-shadow: var(--shadow);
+}
+.lbl {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.tchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+}
+.tchip[aria-pressed='true'] {
+  border-color: var(--text);
+  background: var(--surface);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.dot[data-on='1'] {
+  background: var(--good);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent);
+}
+.voiceLine {
+  text-align: center;
+  min-height: 1.3em;
+  margin: 0.4rem 0 0;
+}
+@media (max-width: 860px) {
+  .wrap {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+}

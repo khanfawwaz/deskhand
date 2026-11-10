@@ -14,6 +14,10 @@ interface UiState {
   /** which Settings box to scroll to when it opens ('skills' = What Deskhand has learned); null = the top */
   settingsSection: string | null;
   openSettingsAt: (section: string) => void;
+  /** the phone sidebar drawer (owned by the shell) */
+  drawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -25,4 +29,7 @@ export const useUi = create<UiState>((set) => ({
   closeConnect: () => set({ connectOpen: false }),
   settingsSection: null,
   openSettingsAt: (section) => set({ settingsOpen: true, settingsSection: section }),
+  drawerOpen: false,
+  openDrawer: () => set({ drawerOpen: true }),
+  closeDrawer: () => set({ drawerOpen: false }),
 }));

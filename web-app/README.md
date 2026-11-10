@@ -29,6 +29,9 @@ A local server for `npm run dev` to talk to: from the repository root, `python s
 | `npm run build` | `tsc --noEmit` then `vite build` into `dist/` |
 | `npm test` / `npm run test:watch` | Vitest once / in watch mode |
 | `npm run lint`, `npm run typecheck` | ESLint (typescript-eslint, react-hooks rules), TypeScript `strict` |
+| `npm run test:e2e` | Builds, then runs the Playwright flows in the installed Chrome against a small fake server (`tests/e2e`) |
+| `npm run check:bundle` | Gzip size of the first load (scripts + styles) against a 200 KB budget; run after a build |
+| `npm run sync:legal` | Copies the words of the privacy policy and terms from the server's pages into the app |
 | `npm run gen:api` | Re-generate `src/api/schema.d.ts` from the server's OpenAPI description (needs the project's Python) |
 
 ## How it is served
@@ -94,3 +97,18 @@ npm run gen:api    # runs scripts/dump_openapi.py (builds the real app around a 
 ```
 
 Commit the changed `src/api/openapi.json` and `src/api/schema.d.ts`.
+
+## Shell, installable app and end-to-end tests
+
+- **Shell** (`features/shell`): the signed-in frame. On phones the sidebar is a drawer (menu button, dimmed area, Escape,
+  closes on navigation). **Ctrl+K / Cmd+K** opens the command palette (`paletteActions.ts` lists what it can do; nothing
+  in it deletes data). The dismissible "Use your own Chrome" tip lives here too (`ExtensionTip.tsx`; remembered in
+  `localStorage` under the same key as the original app).
+- **Shared components** (`src/components`): `Dialog`, `Toaster` + `toast('...')`, `Banner`, `StatusDot`.
+- **Orb** (`features/orb`): `orbSim.ts` is the physics with no browser in it (tested); `Orb.tsx` draws it on a canvas.
+- **Installable app** (`pwa/`): at build time `pwa/plugin.ts` writes `sw.js` with the list of hashed files. Pages are
+  fetched network-first (a new release shows at once; the saved shell is only for when offline), files in `assets/` are
+  kept, the API is never touched. It is registered in production builds only (`src/pwa/register.ts`).
+- **End to end** (`tests/e2e`, `playwright.config.ts`): sign in by code, connect a computer, a task with a question and a
+  follow-up in the same chat, delete a chat, the orb, the palette, the phone drawer, the service worker, and an axe-core
+  accessibility scan (light and dark). Set `CHROME_PATH` to use another Chrome.

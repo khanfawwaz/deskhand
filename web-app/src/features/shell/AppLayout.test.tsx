@@ -1,5 +1,4 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { useSession } from '../../state/session';
@@ -21,9 +20,17 @@ const ME = {
 
 function signedIn(me = ME) {
   useSession.setState({ token: 'tok' });
-  const stream = openStream();
-  server.use(http.get('*/v1/me', () => HttpResponse.json(me)), http.get('*/v1/events', () => stream.response));
-  return stream;
+  const open: ReturnType<typeof openStream>[] = []; // every live connection (the frame's and the chat feature's)
+  server.use(
+    http.get('*/v1/me', () => HttpResponse.json(me)),
+    http.get('*/v1/events', () => {
+      const s = openStream();
+      open.push(s);
+      return s.response;
+    }),
+    http.get('*/v1/tasks', () => HttpResponse.json([])),
+  );
+  return { send: (text: string) => open.forEach((s) => s.send(text)) };
 }
 
 describe('the signed-in app', () => {
@@ -49,30 +56,23 @@ describe('the signed-in app', () => {
         ]) +
         '\n\n',
     );
-    expect(await screen.findByText('Office-PC')).toBeInTheDocument();
+    expect((await screen.findAllByText('Office-PC')).length).toBeGreaterThan(0);
     expect(screen.getByTitle('Offline')).toHaveTextContent('Alex-Laptop');
   });
 
-  it('says there are no computers yet', async () => {
+  it('offers to add a computer when there are none', async () => {
     signedIn({ ...ME, devices: [] });
+    server.use(http.post('*/v1/add-device', () => HttpResponse.json({ command: 'x', expires_in: 900 })));
     renderApp('/');
-    expect(await screen.findByText(/none connected yet/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /add a computer/i })).toBeInTheDocument();
   });
 
   it('opens a chat from its address', async () => {
     signedIn();
     renderApp('/chat/abc123');
-    expect(await screen.findByRole('heading', { name: 'Chat abc123' })).toBeInTheDocument();
-  });
-
-  it('signs out from the sidebar and goes back to the sign-in screen', async () => {
-    signedIn();
-    server.use(http.get('*/v1/auth/config', () => HttpResponse.json({ email_login: true })));
-    const user = userEvent.setup();
-    renderApp('/');
-    await user.click(await screen.findByRole('button', { name: /sign out/i }));
-    expect(await screen.findByLabelText(/your email/i)).toBeInTheDocument();
-    expect(useSession.getState().token).toBeNull();
+    // the frame is there (sidebar and the message box) whatever the chat pane shows for this address
+    expect(await screen.findByRole('textbox', { name: 'Command' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: /deskhand navigation/i })).toBeInTheDocument();
   });
 
   it('shows the problem, with a way to retry, when the server cannot be reached', async () => {

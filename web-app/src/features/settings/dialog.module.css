@@ -80,3 +80,13 @@ details.box[open] > summary { margin-bottom: .4rem; }
 .perks { margin: .4rem 0 .6rem; }
 .confirm :global(.danger):disabled { opacity: .45; cursor: not-allowed; }
 .confirm .actions > * { flex: 0 1 auto; }
+
+/* The connect dialog keeps ONE size across its steps, so it never jumps or re-centres when it moves on to the Chrome step.
+   The buttons stay at the bottom; only the middle scrolls, and only on a very short screen. */
+.connect { display: flex; flex-direction: column; height: min(620px, 88dvh); overflow-y: auto; overscroll-behavior: contain; animation: stepIn .18s ease-out; }
+.connect .actions { margin-top: auto; padding-top: 1rem; }
+.connect .stepcards { gap: .55rem; margin-bottom: .8rem; }
+.connect .stepcard { padding: .7rem .9rem; }
+@keyframes stepIn { from { opacity: 0; translate: 0 6px; } }
+@media (max-height: 700px) { .connect .stepcards { gap: .4rem; } .connect .stepcard { padding: .55rem .8rem; } .connect :global(.lead) { margin-bottom: .6rem; } }
+@media (prefers-reduced-motion: reduce) { .connect { animation: none; } }

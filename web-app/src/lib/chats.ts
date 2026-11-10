@@ -12,10 +12,41 @@ export const norm = (s: unknown): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const APPROVE = new Set(['approve', 'approved', 'yes', 'yeah', 'yep', 'go ahead', 'do it', 'confirm', 'send it', 'ok', 'okay',
-  'sure', 'allow', 'allow it', 'yes please', 'approve it']);
-const DENY = new Set(['deny', 'denied', 'no', 'nope', 'dont', "don't", 'do not', 'reject', 'not now', 'stop', 'cancel',
-  'no thanks', 'dont do it', "don't do it", 'decline']);
+const APPROVE = new Set([
+  'approve',
+  'approved',
+  'yes',
+  'yeah',
+  'yep',
+  'go ahead',
+  'do it',
+  'confirm',
+  'send it',
+  'ok',
+  'okay',
+  'sure',
+  'allow',
+  'allow it',
+  'yes please',
+  'approve it',
+]);
+const DENY = new Set([
+  'deny',
+  'denied',
+  'no',
+  'nope',
+  'dont',
+  "don't",
+  'do not',
+  'reject',
+  'not now',
+  'stop',
+  'cancel',
+  'no thanks',
+  'dont do it',
+  "don't do it",
+  'decline',
+]);
 const CANCEL = new Set(['stop', 'cancel', 'cancel that', 'stop that', 'abort', 'never mind', 'nevermind', 'stop it']);
 const ESTOP = new Set(['emergency stop', 'stop everything', 'kill switch', 'panic', 'emergency']);
 
@@ -47,7 +78,9 @@ export function interpretVoice(text: string, ctx: VoiceContext = {}): VoiceInten
 }
 
 export function tidyGoal(text: unknown): string {
-  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const t = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 }
 
@@ -105,9 +138,24 @@ export function describeStep(step: TaskStep): StepLine {
   const [past, now] = isRecipe
     ? (['Ran saved routine ' + step.tool.slice(7), 'run saved routine ' + step.tool.slice(7)] as const)
     : (VERBS[step.tool] ?? ([step.tool, step.tool] as const));
-  if (PENDING.has(step.status)) return { text: 'Waiting for your OK to ' + now, state: 'working', note: '' };
-  if (step.status === 'cancelled') return { text: 'Did not ' + now + ' (not approved)', state: 'blocked', note: '' };
-  if (WORKING.has(step.status)) return { text: now.charAt(0).toUpperCase() + now.slice(1) + '…', state: 'working', note: '' };
+  if (PENDING.has(step.status))
+    return {
+      text: 'Waiting for your OK to ' + now,
+      state: 'working',
+      note: '',
+    };
+  if (step.status === 'cancelled')
+    return {
+      text: 'Did not ' + now + ' (not approved)',
+      state: 'blocked',
+      note: '',
+    };
+  if (WORKING.has(step.status))
+    return {
+      text: now.charAt(0).toUpperCase() + now.slice(1) + '…',
+      state: 'working',
+      note: '',
+    };
   const state: StepState =
     step.status === 'denied' ? 'blocked' : step.status === 'failed' || step.status === 'uncertain' ? 'problem' : 'ok';
   return { text: past, state, note: step.note || '' };
@@ -154,7 +202,10 @@ export function approvalText(p: PendingApproval | null | undefined): string {
     .replace(/^'[^']*'\s*/, 'This ')
     .replace(/^policy requires approval for .*/, '');
   return (
-    'Deskhand wants to ' + verb + (target ? ' "' + target + '"' : '') + '.' +
+    'Deskhand wants to ' +
+    verb +
+    (target ? ' "' + target + '"' : '') +
+    '.' +
     (reason ? ' ' + reason.charAt(0).toUpperCase() + reason.slice(1) + '.' : '')
   );
 }
@@ -232,8 +283,29 @@ export const pendingTask = (tasks: readonly TaskView[] | undefined): TaskView | 
   (tasks ?? []).find((t) => !t.terminal && t.pending_approval) ?? null;
 
 /** Any task that has not finished. */
-export const runningTask = (tasks: readonly TaskView[] | undefined): TaskView | null =>
-  (tasks ?? []).find((t) => !t.terminal) ?? null;
+export const runningTask = (tasks: readonly TaskView[] | undefined): TaskView | null => (tasks ?? []).find((t) => !t.terminal) ?? null;
 
 /** "3 steps" / "1 step". */
 export const stepCount = (n: number): string => n + (n === 1 ? ' step' : ' steps');
+
+/** The list the server just sent replaces ours (tasks deleted elsewhere disappear), but steps we already hold are kept. */
+export function replaceTasks(fresh: readonly TaskView[], old: readonly TaskView[] | undefined): TaskView[] {
+  const prev = new Map<string, TaskView>((old ?? []).map((t) => [t.id, t]));
+  return fresh
+    .map((t) => {
+      const p = prev.get(t.id);
+      return t.steps === undefined && p?.steps ? { ...t, steps: p.steps } : t;
+    })
+    .sort((a, b) => b.created_at - a.created_at);
+}
+
+export type Mood = 'idle' | 'listening' | 'working' | 'done' | 'stuck';
+
+/** What the orb shows: the mic wins; otherwise how the task in front of the person is going. */
+export function moodFor(task: Pick<TaskView, 'status' | 'terminal' | 'pending_approval'> | null | undefined, listening = false): Mood {
+  if (listening) return 'listening';
+  if (!task) return 'idle';
+  if (task.pending_approval || task.status === 'waiting_for_device' || task.status === 'failed' || task.status === 'cancelled')
+    return 'stuck';
+  return task.terminal ? 'done' : 'working';
+}

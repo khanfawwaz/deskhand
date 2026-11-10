@@ -1,0 +1,244 @@
+/* a task as a conversation (ported from the original app's style.css) */
+.earlier {
+  display: grid;
+  gap: 1.2rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+.earlier > section {
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.earlier > section .assistant {
+  gap: 0.6rem;
+}
+.convo {
+  display: grid;
+  gap: 1.2rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: 0.4rem;
+}
+.bubble {
+  background: var(--bubble);
+  border-radius: 22px;
+  padding: 0.7rem 1.1rem;
+  justify-self: end;
+  max-width: min(85%, 560px);
+}
+.bubble p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.goal {
+  overflow-wrap: anywhere;
+}
+.assistant {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.elapsed {
+  font-size: 1rem;
+}
+.chip {
+  margin-left: auto;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.chip[data-tone='good'] {
+  color: var(--good);
+}
+.chip[data-tone='bad'] {
+  color: var(--bad);
+}
+.chip[data-tone='warn'] {
+  color: var(--warn);
+}
+.spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: none;
+  background: radial-gradient(circle at 35% 30%, #eafff0, var(--mint) 45%, var(--leaf) 90%);
+  animation: drop 1.4s ease-in-out infinite;
+}
+.stepsBox summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.95rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.stepsBox summary::-webkit-details-marker {
+  display: none;
+}
+.stepsBox summary::before {
+  content: '›';
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.stepsBox[open] summary::before {
+  transform: rotate(90deg);
+}
+.steps {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0 0 0 0.3rem;
+  display: grid;
+  gap: 0.45rem;
+  border-left: 2px solid var(--line);
+  margin-left: 0.45rem;
+}
+.steps li {
+  padding-left: 0.8rem;
+  font-size: 0.92rem;
+  color: var(--muted);
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.steps li[data-state='problem'] {
+  color: var(--bad);
+}
+.steps li[data-state='blocked'] {
+  color: var(--warn);
+}
+.steps li[data-state='working'] {
+  color: var(--text);
+}
+.note {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+.qa {
+  display: grid;
+  gap: 0.6rem;
+}
+.q {
+  color: var(--muted);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.qa .bubble {
+  margin: 0;
+}
+/* a question or permission request: options as buttons, plus a free-text answer, as in Claude or ChatGPT */
+.ask {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 1rem;
+  background: var(--surface);
+}
+.askTitle {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.askText {
+  font-size: 1.05rem;
+  margin: 0.4rem 0 0.8rem;
+  overflow-wrap: anywhere;
+}
+.choices {
+  display: grid;
+  gap: 0.5rem;
+}
+.choices button {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.choices button:hover {
+  background: var(--surface-2);
+  border-color: var(--stone);
+}
+.choices .choicePrimary {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+}
+.choices .choicePrimary:hover {
+  background: var(--primary);
+  opacity: 0.9;
+}
+.choices .choiceDanger {
+  color: var(--bad);
+}
+.answer {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.answer input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 14px;
+}
+.sendMini {
+  width: 44px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.answerBox {
+  position: relative;
+}
+.result {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.6;
+}
+.resultActions {
+  margin-top: 0.4rem;
+}
+.err {
+  color: var(--bad);
+  font-size: 0.9rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@keyframes drop {
+  0%,
+  100% {
+    transform: scale(1);
+    border-radius: 50%;
+  }
+  50% {
+    transform: scale(0.82, 1.1);
+    border-radius: 46% 54% 52% 48%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

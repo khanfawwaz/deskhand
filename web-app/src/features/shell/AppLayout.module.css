@@ -5,6 +5,21 @@
 .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
 .splash { max-width: 30rem; margin: 18vh auto; padding: 0 1rem; text-align: center; color: var(--muted); }
+
+/* on a computer the wrapper disappears and the sidebar is simply the first grid column */
+.side { display: contents; }
+.topbar, .scrim { display: none; }
+
+/* phones: the sidebar becomes a drawer that slides in over the page, with a dimmed area behind it */
 @media (max-width: 860px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
+  .topbar { display: flex; align-items: center; gap: .6rem; padding: .4rem .8rem; border-bottom: 1px solid var(--line); background: var(--bg); }
+  .topbar .logo { width: 24px; height: 24px; }
+  .side { display: block; position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; width: min(var(--side-w), 86vw); transform: translateX(-100%); visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s; box-shadow: var(--shadow); }
+  .side[data-open='1'] { transform: none; visibility: visible; transition: transform .22s ease; }
+  /* the sidebar hides itself on phones in its own style sheet: inside the drawer it must show */
+  .side > :global(aside), .side > :global(nav) { display: flex !important; height: 100%; border-right: 0; }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 35; background: rgba(0, 0, 0, .4); }
 }
+@media (prefers-reduced-motion: reduce) { .side, .side[data-open='1'] { transition: none; } }

@@ -20,5 +20,5 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "tests", "vite.config.ts", "app-base.ts", "eslint.config.js"]
+  "include": ["src", "tests", "pwa", "scripts", "playwright.config.ts", "vite.config.ts", "app-base.ts", "eslint.config.js"]
 }

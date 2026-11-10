@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "gen:api": "python ../scripts/dump_openapi.py && openapi-typescript src/api/openapi.json -o src/api/schema.d.ts"
+    "gen:api": "python ../scripts/dump_openapi.py && openapi-typescript src/api/openapi.json -o src/api/schema.d.ts",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "test:e2e": "npm run build && playwright test",
+    "sync:legal": "node scripts/sync-legal.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.107.1",

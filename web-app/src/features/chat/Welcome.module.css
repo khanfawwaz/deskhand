@@ -1,0 +1,61 @@
+.welcome {
+  text-align: center;
+  padding: 0 0 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* the orbit never widens the column */
+  justify-items: center;
+  gap: 0.4rem;
+  position: relative;
+}
+.welcome h2 {
+  font-size: 1.5rem;
+  margin-top: 0;
+  font-weight: 600;
+}
+.welcome :global(.hint) {
+  max-width: 440px;
+  margin-top: 0;
+}
+.chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.55rem;
+  margin-top: 1.4rem;
+  width: 100%;
+  max-width: 520px;
+}
+.chips button {
+  background: var(--surface);
+  border: 0;
+  border-radius: 12px;
+  padding: 0.55rem 0.95rem;
+  font-size: 0.92rem;
+  color: var(--text);
+  max-width: 100%;
+  box-shadow:
+    0 1px 2px rgba(22, 32, 26, 0.08),
+    0 4px 14px rgba(22, 32, 26, 0.06);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.chips button:hover {
+  background: var(--bubble);
+}
+.setup {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  margin-top: 1.2rem;
+  width: 100%;
+  box-shadow: var(--shadow);
+}
+.setup :global(.primary) {
+  margin-top: 0.4rem;
+}
+/* the computers sit on the upper arc, so the empty lower half of the orbit is folded away: the heading stays in view */
+.orbit {
+  width: 100%;
+}

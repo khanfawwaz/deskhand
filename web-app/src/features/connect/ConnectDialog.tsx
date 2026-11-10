@@ -87,7 +87,7 @@ function ConnectBody({ me, onClose }: { me: Me; onClose: () => void }) {
   };
 
   return (
-    <div className={styles.menu}>
+    <div className={`${styles.menu} ${styles.connect}`}>
       <h2 id="connectTitle">Connect your computer</h2>
       <p className="lead">Deskhand does its work on a Windows computer. Install its small helper once, it takes about a minute.</p>
 
@@ -146,7 +146,7 @@ function ChromeStep({ me, deviceId, onClose }: { me: Me; deviceId: string; onClo
   const on = !!me.devices.find((d) => d.device_id === deviceId)?.extension;
   const url = extensionLink(me.extension_url);
   return (
-    <div className={styles.menu}>
+    <div className={`${styles.menu} ${styles.connect}`}>
       <h2 id="connectTitle">Use your own Chrome</h2>
       <p className="lead">Your computer is connected. One more thing, so Deskhand can use your own Chrome:</p>
       <div className={styles.extcard}>

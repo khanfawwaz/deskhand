@@ -1,10 +1,12 @@
 /* The orb and the person's computers around it. Motion here answers something: a choice, a sent task, a state. */
+.room {
+  width: 100%;
+  min-width: 0;
+}
 .stage {
   position: relative;
-  width: var(--stage);
-  height: var(--stage);
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;          /* the stage follows the room; the pods are placed from its centre */
+  height: var(--h);
   display: grid;
   place-items: center;
 }
@@ -18,7 +20,9 @@
 
 .wires {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
   pointer-events: none;
   overflow: visible;
 }
@@ -26,6 +30,12 @@
   stroke: var(--line);
   stroke-width: 1.5;
   stroke-dasharray: 2 7;
+  stroke-linecap: round;
+}
+.mesh {
+  stroke: var(--line);
+  stroke-width: 1;
+  opacity: 0.45;
   stroke-linecap: round;
 }
 .wireOn {
@@ -68,7 +78,9 @@
   position: absolute;
   left: calc(50% + var(--x));
   top: calc(50% + var(--y));
-  translate: -50% -50%;
+  translate: -50% -23px; /* anchored at the middle of the disc, so the line meets it; the name hangs below */
+  transform: translate(var(--dx, 0px), var(--dy, 0px));   /* --dx/--dy: the drift, set per frame; transform keeps it smooth */
+  will-change: transform;
   z-index: 2;
   display: grid;
   justify-items: center;
@@ -79,8 +91,6 @@
   color: var(--muted);
   font: inherit;
   cursor: pointer;
-  animation: bob 5.5s ease-in-out infinite;
-  animation-delay: calc(var(--i) * -0.9s);
 }
 .disc {
   width: 46px;
@@ -97,7 +107,7 @@
   font-weight: 650;
 }
 .name {
-  max-width: 9.5rem;
+  max-width: 7.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -106,6 +116,38 @@
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
   background: var(--bg);
+}
+.stage[data-compact='1'] .name {
+  max-width: 5rem;
+  font-size: 0.72rem;
+}
+.stage[data-compact='1'] .disc {
+  width: 40px;
+  height: 40px;
+}
+.stage[data-compact='1'] .pod {
+  translate: -50% -20px;
+}
+/* online: a small green light on the disc, and a soft glow */
+.dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mint);
+  border: 2px solid var(--surface);
+  display: none;
+}
+.disc {
+  position: relative;
+}
+.pod[data-online='1'] .dot {
+  display: block;
+}
+.pod[data-online='1'] .disc {
+  box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--mint) 12%, transparent);
 }
 .pod:hover .disc {
   scale: 1.08;
@@ -138,9 +180,6 @@
   border-style: dashed;
   color: var(--muted);
 }
-.more {
-  cursor: default;
-}
 
 /* a task was sent: a spark runs from the orb to each chosen computer */
 .spark {
@@ -163,9 +202,6 @@
   80% { opacity: 1; }
   to { translate: var(--tx) var(--ty); scale: 1.3; opacity: 0; }
 }
-@keyframes bob {
-  50% { translate: -50% calc(-50% - 4px); }
-}
 @keyframes breathe {
   50% { scale: 1.07; opacity: 0.35; }
 }
@@ -178,7 +214,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pod, .spark, .ring { animation: none !important; }
+  .spark, .ring { animation: none !important; }
   .spark { display: none; }
   .stage[data-mood='listening'] .ring, .stage[data-mood='working'] .ring { opacity: 0.8; }
   .stage[data-mood='done'] .ring { opacity: 0.8; stroke: var(--good); }

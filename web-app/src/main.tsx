@@ -3,12 +3,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { makeQueryClient } from './api/queries';
+import { registerServiceWorker } from './pwa/register';
 import { routes } from './routes';
 import { initTheme } from './state/theme';
 import './styles/tokens.css';
 import './styles/base.css';
 
 initTheme();
+registerServiceWorker(); // production builds only
 
 const queryClient = makeQueryClient();
 // Vite's base is '/app-next/' (see app-base.ts); the router wants it without the trailing slash

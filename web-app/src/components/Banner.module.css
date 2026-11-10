@@ -1,0 +1,7 @@
+.banner { display: flex; align-items: center; gap: .8rem; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: .6rem .7rem .6rem 1rem; margin: .5rem auto 0; width: calc(100% - 2rem); max-width: 44rem; box-shadow: var(--shadow); flex: none; }
+.text { display: grid; gap: .1rem; min-width: 0; flex: 1; font-size: .9rem; }
+.text span { color: var(--muted); }
+.pill { flex: none; font-size: .78rem; padding: .2rem .7rem; border: 1px dashed var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; }
+.pillLink { border-style: solid; background: var(--primary); color: var(--primary-ink); text-decoration: none; font-weight: 600; }
+.banner :global(.icon-btn) { flex: none; color: var(--muted); }

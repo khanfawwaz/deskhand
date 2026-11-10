@@ -4,7 +4,7 @@
   /* palette: #FAFAFA Dr. White, #EBEDEC Moonlit Snow, #DBE5DD Aqua Squeeze, #C1C2C1 Stonewall Grey, #6ED987 Jube Green,
      #1BC237 Green With Envy. Calm and neutral: green is used sparingly (the orb, small dots), never as a big fill. */
   --bg: #FFFFFF; --side: #EBEDEC; --surface: #FFFFFF; --surface-2: #F2F4F3; --bubble: #DBE5DD; --line: #DCE1DE;
-  --text: #12241d; --muted: #6a7a72; --primary: #12241d; --primary-ink: #FAFAFA; --accent: #3d6b52;
+  --text: #12241d; --muted: #566660; --primary: #12241d; --primary-ink: #FAFAFA; --accent: #3d6b52;
   --leaf: #1BC237; --mint: #6ED987; --stone: #C1C2C1;
   --good: #23823d; --bad: #b4492e; --warn: #8f5f14; --busy: #3d6b52; --focus: #12241d;
   --radius: 16px; --shadow: 0 1px 2px rgba(18,36,29,.05), 0 6px 22px rgba(18,36,29,.06);
