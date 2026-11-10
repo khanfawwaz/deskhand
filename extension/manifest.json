@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Deskhand",
   "short_name": "Deskhand",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minimum_chrome_version": "116",
   "description": "Lets the Deskhand app on your computer carry out web tasks you ask for, in your own signed-in Chrome.",
   "permissions": ["debugger", "tabs", "alarms", "storage"],

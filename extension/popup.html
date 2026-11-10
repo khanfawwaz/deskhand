@@ -16,7 +16,7 @@
   .status { display:flex; gap:10px; align-items:flex-start; background:var(--surface); border:1px solid var(--line);
             border-radius:12px; padding:12px; }
   .dot { width:10px; height:10px; border-radius:50%; margin-top:5px; background:var(--muted); flex:none; }
-  .dot.connected { background:var(--good); } .dot.pairing { background:var(--warn); } .dot.denied { background:var(--bad); }
+  .dot.connected { background:var(--good); } .dot.pairing { background:var(--warn); } .dot.denied { background:var(--bad); } .dot.noapp { background:var(--warn); }
   .status strong { display:block; } .status span { color:var(--muted); font-size:13px; }
   button { font:inherit; border:0; border-radius:10px; padding:10px 12px; cursor:pointer; background:var(--primary); color:#07071D;
            font-weight:600; width:100%; }
@@ -31,6 +31,7 @@
 <main>
   <div class="status"><i class="dot" id="dot"></i><div><strong id="title">Checking…</strong><span id="detail"></span></div></div>
   <button id="pair" hidden>Connect to Deskhand</button>
+  <button id="get" class="quiet" hidden>Get the Deskhand app</button>
   <button id="forget" class="quiet" hidden>Disconnect this browser</button>
   <p>Deskhand only controls this browser while you have asked it to do a task. It does not ask for your cookies or
      passwords, and it only talks to the Deskhand app on this computer.</p>

@@ -1,28 +1,33 @@
 // Deskhand: connects OUT to the Deskhand app on this computer (127.0.0.1 only) and runs its commands on browser tabs.
 // Nothing here reads cookies or passwords, and nothing is sent anywhere except to the Deskhand app on this computer.
 const PORT = 9223;
+const SITE_URL = "https://deskhand.fawwazkhan.dev/app/";   // where to get the Deskhand app; opened only when the person presses Connect and the app is not there
 let ws = null;
 let attached = new Set();
-let state = { status: "searching", detail: "" };   // searching | pairing | connected | denied
+let state = { status: "searching", detail: "" };   // searching | pairing | connected | denied | noapp
 
 function setState(status, detail = "") {
   state = { status, detail };
   chrome.storage.session.set({ state }).catch(() => {});
-  const badge = { connected: ["", "#74c9a0"], pairing: ["…", "#e3b07a"], denied: ["!", "#e0795c"], searching: ["", "#999"] }[status];
+  const badge = { connected: ["", "#74c9a0"], pairing: ["…", "#e3b07a"], denied: ["!", "#e0795c"], noapp: ["!", "#e3b07a"], searching: ["", "#999"] }[status];
   chrome.action.setBadgeText({ text: badge[0] }).catch(() => {});
   chrome.action.setBadgeBackgroundColor({ color: badge[1] }).catch(() => {});
 }
 
 async function getToken() { return (await chrome.storage.local.get("token")).token || ""; }
 
+// Resolves true when the Deskhand app answered on this computer, false when it did not (not installed, not running).
 async function connect(pair = false) {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return true;
   const token = await getToken();
-  if (!token && !pair) { setState("searching", "not paired"); return; }
+  if (!token && !pair) { setState("searching", "not paired"); return false; }
   const q = token ? `token=${encodeURIComponent(token)}` : "pair=1";
-  try { ws = new WebSocket(`ws://127.0.0.1:${PORT}/?${q}`); } catch (e) { return; }
+  let settle;
+  const outcome = new Promise((resolve) => { settle = resolve; });          // the first answer wins; later ones are ignored
+  try { ws = new WebSocket(`ws://127.0.0.1:${PORT}/?${q}`); } catch (e) { return false; }
   if (!token) setState("pairing", "waiting for you to approve it in Deskhand");
-  ws.onopen = () => ws.send(JSON.stringify({ hello: "deskhand-extension", version: chrome.runtime.getManifest().version }));
+  setTimeout(() => settle(false), 4000);
+  ws.onopen = () => { settle(true); ws.send(JSON.stringify({ hello: "deskhand-extension", version: chrome.runtime.getManifest().version })); };
   ws.onmessage = async (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
     if (m.paired) { await chrome.storage.local.set({ token: m.paired }); setState("connected"); return; }
@@ -33,12 +38,14 @@ async function connect(pair = false) {
     try { ws.send(JSON.stringify(out)); } catch (e) {}
   };
   ws.onclose = () => {
+    settle(false);
     ws = null;
     for (const t of attached) chrome.debugger.detach({ tabId: t }).catch(() => {});      // let go of every tab: nothing stays attached
     attached.clear();
     if (state.status === "connected") setState("searching", "Deskhand app not running");
   };
-  ws.onerror = () => {};
+  ws.onerror = () => settle(false);
+  return outcome;
 }
 
 async function attach(tabId) {
@@ -88,7 +95,20 @@ async function handle(m) {
 // popup <-> background
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === "status") { reply({ state, connected: !!ws && ws.readyState === WebSocket.OPEN }); return; }
-  if (msg.type === "pair") { ws && ws.close(); ws = null; chrome.storage.local.remove("token").then(() => { connect(true); reply({ ok: true }); }); return true; }
+  if (msg.type === "pair") {
+    ws && ws.close(); ws = null;
+    chrome.storage.local.remove("token").then(async () => {
+      const found = await connect(true);
+      if (!found) {                                    // no Deskhand app on this computer: say so, and take the person to the website
+        try { ws && ws.close(); } catch (e) {}
+        ws = null;
+        setState("noapp", "Deskhand app not found on this computer");
+        chrome.tabs.create({ url: SITE_URL }).catch(() => {});
+      }
+      reply({ ok: found, noapp: !found });
+    });
+    return true;
+  }
   if (msg.type === "forget") { ws && ws.close(); ws = null; chrome.storage.local.remove("token").then(() => { setState("searching", "not paired"); reply({ ok: true }); }); return true; }
 });
 

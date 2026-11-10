@@ -1,6 +1,6 @@
 # Chrome Web Store listing: Deskhand
 
-Upload `dist/extension/deskhand-extension-1.0.0.zip` (build it with `python scripts/build_extension.py`).
+Upload `dist/extension/deskhand-extension-1.0.1.zip` (build it with `python scripts/build_extension.py`).
 Images are in `dist/extension/store/`.
 
 ## Store listing tab
@@ -21,7 +21,7 @@ uses your accounts without you sharing a password with anyone.
 
 This extension is the bridge between Chrome and the Deskhand app that runs on your computer. Install the Deskhand app
 first (deskhand.fawwazkhan.dev), then press "Connect to Deskhand" in the extension. A window on your computer asks you to
-approve the connection once.
+approve the connection once. If the Deskhand app is not installed yet, the Connect button opens the Deskhand website so you can set it up.
 
 Private by design
 - Talks only to the Deskhand app on your own computer. No requests to the internet, no remote code.

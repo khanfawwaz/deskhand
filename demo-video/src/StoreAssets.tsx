@@ -38,7 +38,7 @@ const Popup: React.FC<{ src: string; style?: React.CSSProperties }> = ({ src, st
 
 export const Shot1: React.FC = () => (
   <Shot title="Connect once, from the popup" sub="Press Connect to Deskhand. Nothing happens until you approve it on your computer.">
-    <Popup src="popup-1-crop.png" style={{ right: 70, top: 100 }} />
+    <Popup src="popup-1-crop.png" style={{ right: 70, top: 60, height: 668 }} />
   </Shot>
 );
 

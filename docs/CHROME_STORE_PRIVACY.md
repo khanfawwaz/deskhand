@@ -55,7 +55,7 @@ the Deskhand app on the same computer may send what it needs for a task to its A
 > full flow: install the Deskhand app from https://deskhand.fawwazkhan.dev (sign in with an email link), open the extension popup
 > and press "Connect to Deskhand", then approve the Yes/No window shown by the app (No is selected by default). Ask Deskhand for a
 > web task such as "open YouTube and play the latest video from NetworkChuck": it works in its own window, and Chrome shows its
-> debugging bar. A short screen recording of this flow is attached/linked. The `debugger` permission is used only to read and
+> debugging bar. If the Deskhand app is not installed, pressing Connect shows "Deskhand app not found" and opens the Deskhand website (https://deskhand.fawwazkhan.dev/app/) in a new tab; this happens only when the person presses Connect or "Get the Deskhand app", never in the background. A short screen recording of this flow is attached/linked. The `debugger` permission is used only to read and
 > operate the tab the user-started task works in. The extension makes no network requests other than to the Deskhand app on the same computer.
 
 Attach the review video (`demo-video/out/deskhand-chrome-review.mp4`) or a link to it, plus the images in `dist/extension/store-images/`.
