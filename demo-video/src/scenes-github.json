@@ -1,0 +1,203 @@
+{
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "s00-title",
+      "kind": "title",
+      "label": "Deskhand",
+      "min": 4.2,
+      "headline": "Tell your computer what to do.",
+      "text": "Meet Deskhand. Tell your computer what to do, in your own words.",
+      "audio": "audio/github/s00-title.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 126,
+      "narrationSeconds": 3.64
+    },
+    {
+      "id": "s01-signin",
+      "kind": "clip",
+      "clip": "a-signin",
+      "speed": 1.2,
+      "label": "1 · Sign in",
+      "text": "Sign in with just your email. No password.",
+      "audio": "audio/github/s01-signin.wav",
+      "clipSeconds": 6.78,
+      "clipFrames": 169,
+      "frames": 170,
+      "narrationSeconds": 2.57
+    },
+    {
+      "id": "s02-connect",
+      "kind": "clip",
+      "clip": "b-connect",
+      "speed": 1.15,
+      "label": "2 · Connect your computer",
+      "text": "First time? Copy one command, paste it into PowerShell, and your computer connects itself.",
+      "audio": "audio/github/s02-connect.wav",
+      "clipSeconds": 7.46,
+      "clipFrames": 194,
+      "frames": 195,
+      "narrationSeconds": 5.3
+    },
+    {
+      "id": "s03-home",
+      "kind": "clip",
+      "clip": "c-home",
+      "speed": 1.25,
+      "label": "3 · Ask in plain words",
+      "text": "Ask for anything in plain words. The bubble even reacts to your cursor. Pull it far, and the theme flips.",
+      "audio": "audio/github/s03-home.wav",
+      "clipSeconds": 14.66,
+      "clipFrames": 351,
+      "frames": 352,
+      "narrationSeconds": 6.24
+    },
+    {
+      "id": "s04-task",
+      "kind": "clip",
+      "clip": "d-task",
+      "speed": 1.1,
+      "label": "4 · Watch it work",
+      "text": "Watch every step in plain English. When it's unsure, it asks with buttons. Then you get the result.",
+      "audio": "audio/github/s04-task.wav",
+      "clipSeconds": 11.69,
+      "clipFrames": 318,
+      "frames": 319,
+      "narrationSeconds": 5.62
+    },
+    {
+      "id": "s05-picker",
+      "kind": "clip",
+      "clip": "e-picker",
+      "speed": 1.15,
+      "label": "5 · Pick the computer",
+      "text": "More than one computer? Choose where it runs, or pick several.",
+      "audio": "audio/github/s05-picker.wav",
+      "clipSeconds": 6.34,
+      "clipFrames": 165,
+      "frames": 166,
+      "narrationSeconds": 3.21
+    },
+    {
+      "id": "s06-voice",
+      "kind": "voice",
+      "label": "6 · Just say it",
+      "min": 6,
+      "headline": "Alt + F8",
+      "sub": "Say your command, anywhere",
+      "typed": "open calculator and add seven and five",
+      "text": "Or press Alt and F8 anywhere, and just say it.",
+      "say": "Or press Alt and F eight anywhere, and just say it.",
+      "audio": "audio/github/s06-voice.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 180,
+      "narrationSeconds": 2.87
+    },
+    {
+      "id": "s07-together",
+      "kind": "together",
+      "label": "7 · Keep using your computer",
+      "min": 6.5,
+      "text": "It works in its own window, so you keep using your computer.",
+      "audio": "audio/github/s07-together.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 195,
+      "narrationSeconds": 3.13
+    },
+    {
+      "id": "s07b-ext",
+      "kind": "popupclip",
+      "clip": "h-popup2",
+      "speed": 1,
+      "label": "Chrome extension",
+      "min": 6,
+      "headline": "Works in your own signed-in Chrome",
+      "sub": "A small extension, approved once by you, lets Deskhand use the accounts you are already logged in to.",
+      "text": "A small Chrome extension lets it work in your own signed-in browser, once you approve it.",
+      "audio": "audio/github/s07b-ext.wav",
+      "clipSeconds": 5.2,
+      "clipFrames": 156,
+      "frames": 180,
+      "narrationSeconds": 4.66
+    },
+    {
+      "id": "s08-settings",
+      "kind": "clip",
+      "clip": "f-settings",
+      "speed": 1.2,
+      "label": "8 · Simple settings",
+      "text": "Settings is simple boxes. Switch theme, check usage, or hit emergency stop.",
+      "audio": "audio/github/s08-settings.wav",
+      "clipSeconds": 12.14,
+      "clipFrames": 303,
+      "frames": 304,
+      "narrationSeconds": 4.86
+    },
+    {
+      "id": "s09-control",
+      "kind": "control",
+      "label": "9 · You stay in control",
+      "min": 7,
+      "headline": "Safety runs on your computer,\nnot inside the AI",
+      "points": [
+        "Only approved apps, folders and sites",
+        "New websites need your OK",
+        "Emergency stop, always one tap away"
+      ],
+      "text": "Safety rules run on your computer, not inside the AI.",
+      "audio": "audio/github/s09-control.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 210,
+      "narrationSeconds": 3.41
+    },
+    {
+      "id": "s09b-arch",
+      "kind": "flow",
+      "label": "How it fits together",
+      "min": 9,
+      "headline": "How it fits together",
+      "nodes": [
+        {
+          "title": "Web app or phone",
+          "sub": "Where you give the command"
+        },
+        {
+          "title": "Deskhand server",
+          "sub": "Yours: queues work, enforces the rules"
+        },
+        {
+          "title": "Deskhand for Windows",
+          "sub": "Runs on each computer you connect"
+        },
+        {
+          "title": "Apps and Chrome",
+          "sub": "Native apps, plus the extension"
+        }
+      ],
+      "text": "The web app talks to your own Deskhand server, which sends work to the app on each computer you connect. It drives native apps, and Chrome through the extension.",
+      "audio": "audio/github/s09b-arch.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 277,
+      "narrationSeconds": 8.76
+    },
+    {
+      "id": "s10-outro",
+      "kind": "title",
+      "label": "Deskhand",
+      "min": 4,
+      "headline": "Say it. It is done.",
+      "text": "Deskhand. Say it, and it's done.",
+      "link": "github.com/khanfawwaz/deskhand",
+      "audio": "audio/github/s10-outro.wav",
+      "clipSeconds": 0,
+      "clipFrames": 0,
+      "frames": 120,
+      "narrationSeconds": 1.89
+    }
+  ]
+}

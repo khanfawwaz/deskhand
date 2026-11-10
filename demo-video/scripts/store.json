@@ -1,0 +1,50 @@
+[
+  { "id": "t00-title", "kind": "title", "label": "Deskhand for Chrome", "min": 5,
+    "headline": "Web tasks, in your own signed-in browser",
+    "text": "Deskhand for Chrome. It lets the Deskhand app on your own computer carry out web tasks you ask for, in your signed-in Chrome." },
+
+  { "id": "t01-flow", "kind": "flow", "label": "How it works", "min": 9, "headline": "How it works",
+    "nodes": [
+      { "title": "You ask", "sub": "In the Deskhand app, or by voice" },
+      { "title": "Deskhand app", "sub": "Runs on your own computer" },
+      { "title": "This extension", "sub": "Talks only to the app on your own computer" },
+      { "title": "One Chrome tab", "sub": "Does the clicking and typing" }
+    ],
+    "text": "You ask for a task. The Deskhand app on your computer passes the steps to this extension, which carries them out in one Chrome tab. Everything stays on your computer." },
+
+  { "id": "t02-popup1", "kind": "popupclip", "clip": "h-popup1", "speed": 1, "label": "1 · Connect", "min": 6,
+    "headline": "Not connected until you connect it", "sub": "The popup says so until the Deskhand app is running. Press Connect to start.",
+    "text": "After installing, the popup says Not connected. Press Connect, and nothing happens until you approve it on your computer." },
+
+  { "id": "t03-approval", "kind": "approval", "label": "2 · You approve it", "min": 6.5, "sub": "A native Yes or No window. No is selected by default.",
+    "text": "A Yes or No window appears on your computer, with No selected by default. Only you can approve it." },
+
+  { "id": "t04-popup2", "kind": "popupclip", "clip": "h-popup2", "speed": 1, "label": "3 · Connected", "min": 5.5,
+    "headline": "Connected, and you can disconnect any time", "sub": "One press on Disconnect this browser removes the approval.",
+    "text": "Once approved, the popup shows Connected. You can disconnect this browser at any time." },
+
+  { "id": "t05-agent", "kind": "agentwindow", "label": "4 · Its own window", "min": 8.5,
+    "text": "When a task runs, Deskhand uses its own browser window. It never touches your other tabs, and Chrome shows its standard debugging bar the whole time." },
+
+  { "id": "t06-task", "kind": "clip", "clip": "g-webtask", "speed": 1.15, "label": "5 · A task, step by step",
+    "text": "In the Deskhand app you see each step: open a page, search, look at the links, click. Then the result." },
+
+  { "id": "t07-perms", "kind": "permissions", "label": "Permissions", "min": 8.5, "headline": "Four permissions, one purpose each",
+    "perms": [
+      { "name": "debugger", "why": "Read and operate the one tab a task is working in, only while a task you started runs" },
+      { "name": "tabs", "why": "Find that tab and read its address and title, or open a tab for the task" },
+      { "name": "alarms", "why": "Keep the extension connected to the app on this computer" },
+      { "name": "storage", "why": "Remember that you approved the connection" }
+    ],
+    "chips": ["No remote code", "Your computer only", "No data sold"],
+    "text": "Four permissions, one purpose each. Debugger, to read and operate the task's tab. Tabs, to find that tab. Alarms, to stay connected. Storage, to remember your approval." },
+
+  { "id": "t08-privacy", "kind": "control", "label": "Privacy", "min": 8,
+    "headline": "Private by design",
+    "points": ["Talks only to the Deskhand app on your computer", "No remote code, no data sold", "You approve once, and can disconnect any time"],
+    "text": "It talks only to the Deskhand app on your own computer. No remote code, and no data is sold. The privacy policy is linked in the listing." },
+
+  { "id": "t09-outro", "kind": "title", "label": "Deskhand for Chrome", "min": 4.5,
+    "headline": "Your browser. Your accounts. Your approval.", "link": "deskhand.fawwazkhan.dev",
+    "text": "Deskhand for Chrome. Your browser, your accounts, your approval." }
+]
