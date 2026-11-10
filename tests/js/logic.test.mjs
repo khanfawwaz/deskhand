@@ -66,3 +66,26 @@ test('approval text, elapsed time and pairing codes', () => {
   assert.equal(L.prettyCode('abcd'), 'ABCD');
   assert.equal(L.normalizeCode(' ab-cd ef.gh '), 'ABCDEFGH');
 });
+
+test('chats: follow-ups share a thread, the row is titled by the first message, newest chat first', () => {
+  const tasks = [
+    { id: 'a', thread: 'a', goal: 'open youtube', created_at: 10, status: 'completed', terminal: true },
+    { id: 'b', thread: 'a', goal: 'now close it', created_at: 20, status: 'failed', terminal: true },
+    { id: 'c', thread: 'c', goal: 'write a note', created_at: 15, status: 'completed', terminal: true },
+    { id: 'd', goal: 'old task without thread info', created_at: 5, status: 'completed', terminal: true },
+  ];
+  const chats = L.groupChats(tasks);
+  assert.deepEqual(chats.map((c) => c.thread), ['a', 'c', 'd']);                      // by latest activity
+  assert.equal(chats[0].title, 'open youtube');                                       // first message, not the latest
+  assert.equal(chats[0].latest.id, 'b');                                              // the dot shows the latest task
+  assert.deepEqual(chats[0].tasks.map((t) => t.id), ['a', 'b']);                      // oldest first
+  assert.equal(chats[2].root.id, 'd');                                                // tasks from before threads are their own chat
+  assert.deepEqual(L.groupChats([]), []);
+  assert.deepEqual(L.groupChats(undefined), []);
+});
+
+test('chats: a message continues the open chat only after its latest task has finished', () => {
+  assert.equal(L.continueTarget({ id: 'x', terminal: true }), 'x');
+  assert.equal(L.continueTarget({ id: 'x', terminal: false }), null);                 // still running: behaviour stays as before
+  assert.equal(L.continueTarget(null), null);                                         // no chat open: a new one
+});

@@ -109,7 +109,8 @@ def test_devices_list_shows_status_but_no_secrets(env):
     c, *_ = env
     token = pair(c)["token"]
     d = c.get("/v1/devices", headers=auth(token)).json()
-    assert d == [{"device_id": DEMO_DEVICE, "name": "Demo laptop (simulated)", "online": True, "last_seen": None}]
+    assert d == [{"device_id": DEMO_DEVICE, "name": "Demo laptop (simulated)", "online": True, "last_seen": None,
+                  "extension": False}]                       # a simulated laptop has no Chrome extension connected
 
 
 def test_a_task_runs_end_to_end_and_the_app_sees_steps_and_the_result(env):

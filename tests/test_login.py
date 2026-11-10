@@ -162,7 +162,7 @@ def test_a_switched_off_workspace_cannot_sign_back_in(mail):
 
 def test_the_app_can_ask_whether_email_sign_in_is_available(mail):
     c, store, m, app = mail
-    assert c.get("/v1/auth/config").json() == {"email_login": True, "signup": "open"}
+    assert c.get("/v1/auth/config").json() == {"email_login": True, "signup": "open", "extension_url": ""}
     app.state.auth.mailer, app.state.auth.signup = None, "closed"
     assert c.get("/v1/auth/config").json()["email_login"] is False
 
