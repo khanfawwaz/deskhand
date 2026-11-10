@@ -26,19 +26,28 @@ if os.name == "nt":
     from ctypes import wintypes
 
 WM_CLOSE, WM_DESTROY, WM_COMMAND, WM_TIMER, WM_SETFONT = 0x0010, 0x0002, 0x0111, 0x0113, 0x0030
+WM_HOTKEY, HOTKEY_ID = 0x0312, 0x4448                  # the voice shortcut
 WM_APP = 0x8000
-MSG_SHOW, MSG_TOGGLE, MSG_QUIT, MSG_RESTART = WM_APP + 1, WM_APP + 2, WM_APP + 3, WM_APP + 4
-ID_OPEN, ID_TOGGLE, ID_QUIT = 1001, 1002, 1003
-CLASS_NAME, MUTEX_NAME = "DeskhandMainWindow", "Deskhand.App.Singleton"
+MSG_SHOW, MSG_TOGGLE, MSG_QUIT, MSG_RESTART, MSG_SHORTCUT = WM_APP + 1, WM_APP + 2, WM_APP + 3, WM_APP + 4, WM_APP + 5
+ID_OPEN, ID_TOGGLE, ID_QUIT, ID_KEY = 1001, 1002, 1003, 1004
+ID_SAVE, ID_CANCEL, ID_OFF = 2001, 2002, 2003                  # the "change shortcut" box
+# a development copy (DESKHAND_DEV=name) runs beside the installed one: its own window class, single-instance lock and title
+_DEV = ("." + os.environ["DESKHAND_DEV"]) if os.environ.get("DESKHAND_DEV") else ""
+CLASS_NAME, MUTEX_NAME = "DeskhandMainWindow" + _DEV, "Deskhand.App.Singleton" + _DEV
+SHORTCUT_CLASS = "DeskhandShortcutWindow" + _DEV
 NO_WINDOW = 0x08000000
 _keep: list = []                                          # callbacks must outlive the window
 
 
 # ------------------------------------------------------------------ pure logic (testable anywhere)
-def status_text(state: str, paused: bool) -> tuple[str, str]:
+def status_text(state: str, paused: bool, activity: str = "") -> tuple[str, str]:
     """-> (headline, explanation) for the window."""
     if paused:
         return "Paused", "Deskhand is not controlling this computer. Press Resume to bring it back."
+    if state == "online" and activity == "working":
+        return "Working", "Deskhand is carrying out a task. You can keep using your computer: it steps aside when you use the mouse or keyboard."
+    if state == "online" and activity == "waiting":
+        return "Waiting for you", "You are using the computer, so Deskhand is waiting for you to pause before it continues."
     return {"online": ("Online", "You can control this computer from the Deskhand app."),
             "connecting": ("Connecting...", "Reaching your Deskhand server."),
             "stopped": ("Starting...", "The helper is starting up.")}.get(state, ("Starting...", ""))
@@ -81,6 +90,8 @@ def _api():
     u.GetSysColorBrush.restype = wintypes.HBRUSH
     u.AdjustWindowRectEx.argtypes = [ctypes.POINTER(wintypes.RECT), wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     u.IsWindowVisible.argtypes = [wintypes.HWND]
+    u.IsWindow.argtypes = [wintypes.HWND]
+    u.DestroyWindow.argtypes = [wintypes.HWND]
     u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
     k.GetModuleHandleW.restype = wintypes.HMODULE
     k.CreateMutexW.restype = wintypes.HANDLE
@@ -124,6 +135,9 @@ class DeskhandApp:
         self.home, self.url, self.badge, self.read_status = home, app_url(home), badge, read_status
         self.u, self.k, self.g, LR = _api()
         self.paused, self.quitting, self.tray, self.last_state = False, False, None, None
+        self.hotkey_ok, self.hotkey_msg = False, ""
+        self.kdlg = self.khot = self.klabel = None                 # the "change shortcut" box while it is open
+        self._LR = LR
         self.sup = Supervisor(home, on_update=lambda: self.u.PostMessageW(self.hwnd, MSG_RESTART, 0, 0))
         self.start_hidden = minimized and not show
         self._build(LR)
@@ -158,9 +172,9 @@ class DeskhandApp:
         u.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
         u.RegisterClassW(ctypes.byref(wc))
         style = 0x00C00000 | 0x00080000 | 0x00020000           # caption, system menu, minimise (no resize/maximise)
-        r = wintypes.RECT(0, 0, S(400), S(236))
+        r = wintypes.RECT(0, 0, S(400), S(278))
         u.AdjustWindowRectEx(ctypes.byref(r), style, False, 0)
-        self.hwnd = u.CreateWindowExW(0, CLASS_NAME, "Deskhand", style, S(200), S(160), r.right - r.left, r.bottom - r.top,
+        self.hwnd = u.CreateWindowExW(0, CLASS_NAME, "Deskhand" + (" (dev)" if _DEV else ""), style, S(200), S(160), r.right - r.left, r.bottom - r.top,
                                       None, None, hinst, None)
         mk = lambda cls, text, x, y, w, h, cid=0, st=0: u.CreateWindowExW(    # noqa: E731
             0, cls, text, 0x50000000 | st, S(x), S(y), S(w), S(h), self.hwnd, cid, hinst, None)
@@ -173,9 +187,10 @@ class DeskhandApp:
         self.b_open = mk("BUTTON", "Open Deskhand", 24, 158, 168, 34, ID_OPEN, 0x00010001)    # tab stop + default button
         self.b_toggle = mk("BUTTON", "Pause", 206, 158, 168, 34, ID_TOGGLE, 0x00010000)
         self.b_quit = mk("BUTTON", "Quit Deskhand", 24, 198, 168, 28, ID_QUIT, 0x00010000)
-        self.hint = mk("STATIC", "Closing this window keeps\nDeskhand running near the clock.", 206, 196, 190, 34)
+        self.b_key = mk("BUTTON", "Change shortcut...", 206, 198, 168, 28, ID_KEY, 0x00010000)
+        self.hint = mk("STATIC", "Closing this window keeps\nDeskhand running near the clock.", 24, 236, 350, 38)
         for h, f in ((self.title, f_big), (self.head, f_norm), (self.body, f_norm), (self.detail, f_small),
-                     (self.b_open, f_norm), (self.b_toggle, f_norm), (self.b_quit, f_norm), (self.hint, f_small)):
+                     (self.b_open, f_norm), (self.b_toggle, f_norm), (self.b_quit, f_norm), (self.b_key, f_norm), (self.hint, f_small)):
             u.SendMessageW(h, WM_SETFONT, f, 1)
         u.SetTimer(self.hwnd, 1, 1000, None)
 
@@ -183,17 +198,19 @@ class DeskhandApp:
         state, _ = self.read_status(self.home)
         if not self.sup.running and not self.paused:
             state = "stopped"
-        head, body = status_text(state, self.paused)
+        from .tray import read_activity
+        activity = read_activity(self.home) if state == "online" else ""
+        head, body = status_text(state, self.paused, activity)
         u = self.u
         u.SetWindowTextW(self.head, ("● " if state == "online" and not self.paused else "") + head)
         u.SetWindowTextW(self.body, body)
         name, ver = computer_name(self.home), self.sup.version
         u.SetWindowTextW(self.detail, f"{name}   ·   version {ver[:7]}" if name else f"version {ver[:7]}")
         u.SetWindowTextW(self.b_toggle, "Resume" if self.paused else "Pause")
-        key = "paused" if self.paused else state
+        key = "paused" if self.paused else (activity or state)
         if self.tray is not None and key != self.last_state:
             try:
-                self.tray.icon = self.badge("stopped" if self.paused else state)
+                self.tray.icon = self.badge("stopped" if self.paused else (activity or state))
                 self.tray.title = "Deskhand: " + head
             except Exception:
                 pass
@@ -217,8 +234,145 @@ class DeskhandApp:
         if self.url:
             webbrowser.open(self.url)
 
+    def open_voice(self) -> None:
+        """The shortcut was pressed: open the 'say a command' prompt."""
+        from . import voice
+        if self.paused:
+            self._say("Deskhand is paused. Press Resume first.")
+            return
+        ok, why = voice.launch_overlay(self.home)
+        if not ok:
+            self._say(why)
+
+    # ---------------------------------------------------------------- change the voice shortcut
+    def _set_hint(self) -> None:
+        self.u.SetWindowTextW(self.hint, (self.hotkey_msg + "\n" if self.hotkey_msg else "") + "Closing this window keeps Deskhand running.")
+
+    def change_shortcut(self) -> None:
+        """A small box with Windows' own 'press the keys you want' control. The current shortcut is switched off while it is open,
+        so pressing it again goes to the box instead of opening the prompt."""
+        from .hotkey import to_control, read_hotkey, unregister
+        u, k = self.u, self.k
+        if self.kdlg and u.IsWindow(self.kdlg):
+            u.ShowWindow(self.kdlg, 9)
+            u.SetForegroundWindow(self.kdlg)
+            return
+        if self.hotkey_ok:
+            unregister(self.hwnd, HOTKEY_ID)
+            self.hotkey_ok = False
+        try:
+            ctypes.windll.comctl32.InitCommonControlsEx(ctypes.byref((ctypes.c_uint * 2)(8, 0x40)))      # ICC_HOTKEY_CLASS
+        except Exception:
+            pass
+        WNDPROC, WNDCLASSW = _define_wndclass(self._LR)
+
+        def proc(hwnd, msg, wp, lp):
+            return self._kproc(hwnd, msg, wp, lp)
+        cb = WNDPROC(proc)
+        _keep.append(cb)
+        hinst = k.GetModuleHandleW(None)
+        wc = WNDCLASSW()
+        wc.lpfnWndProc, wc.hInstance, wc.lpszClassName = cb, hinst, SHORTCUT_CLASS
+        wc.hCursor = u.LoadCursorW(None, ctypes.c_void_p(32512))
+        wc.hbrBackground = u.GetSysColorBrush(5)
+        u.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+        u.RegisterClassW(ctypes.byref(wc))                      # a second registration just fails harmlessly: the first one stays
+        S = lambda v: int(v * self.s)                            # noqa: E731
+        style = 0x00C00000 | 0x00080000                          # caption + system menu
+        r = wintypes.RECT(0, 0, S(420), S(188))
+        u.AdjustWindowRectEx(ctypes.byref(r), style, False, 0)
+        mine = wintypes.RECT()
+        u.GetWindowRect(self.hwnd, ctypes.byref(mine))
+        self.kdlg = u.CreateWindowExW(0x00000008, SHORTCUT_CLASS, "Voice shortcut", style, mine.left + S(20), mine.top + S(40),
+                                      r.right - r.left, r.bottom - r.top, self.hwnd, None, hinst, None)   # WS_EX_TOPMOST
+        mk = lambda cls, text, x, y, w, h, cid=0, st=0, ex=0: u.CreateWindowExW(            # noqa: E731
+            ex, cls, text, 0x50000000 | st, S(x), S(y), S(w), S(h), self.kdlg, cid, hinst, None)
+        font = self.g.CreateFontW(-S(15), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI")
+        self.klabel = mk("STATIC", "Click the box, then press the keys you want, for example Ctrl+Alt+V. It must include Ctrl, Alt or Shift.",
+                         16, 14, 388, 40)
+        self.khot = mk("msctls_hotkey32", "", 16, 62, 388, 28, 0, 0x00010000, 0x200)        # tab stop, client edge
+        b_save = mk("BUTTON", "Save", 16, 112, 120, 32, ID_SAVE, 0x00010001)
+        b_cancel = mk("BUTTON", "Cancel", 148, 112, 120, 32, ID_CANCEL, 0x00010000)
+        b_off = mk("BUTTON", "Turn shortcut off", 280, 112, 124, 32, ID_OFF, 0x00010000)
+        for h in (self.klabel, self.khot, b_save, b_cancel, b_off):
+            u.SendMessageW(h, WM_SETFONT, font, 1)
+        u.SendMessageW(self.khot, 0x403, 3, 0x04)                # HKM_SETRULES: a key alone (or only Shift) is not allowed; Alt is filled in
+        try:
+            u.SendMessageW(self.khot, 0x401, to_control(read_hotkey(self.home)), 0)         # HKM_SETHOTKEY: show the current one
+        except Exception:
+            pass
+        u.ShowWindow(self.kdlg, 5)
+        u.SetForegroundWindow(self.kdlg)
+
+    def _close_shortcut_box(self) -> None:
+        from .hotkey import read_hotkey, register
+        dlg, self.kdlg = self.kdlg, None
+        if dlg:
+            self.u.DestroyWindow(dlg)
+        if not self.hotkey_ok:                                   # nothing new was set: put the old one back
+            self.hotkey_ok, self.hotkey_msg = register(self.hwnd, HOTKEY_ID, read_hotkey(self.home))
+        self._set_hint()
+
+    def apply_shortcut(self, text: str) -> tuple[bool, str]:
+        """Try a new shortcut: register it, and only then remember it. -> (worked, plain message)."""
+        from .hotkey import register, write_hotkey
+        if self.hotkey_ok:
+            from .hotkey import unregister
+            unregister(self.hwnd, HOTKEY_ID)
+            self.hotkey_ok = False
+        ok, msg = register(self.hwnd, HOTKEY_ID, text)
+        if ok:
+            write_hotkey(self.home, text)
+            self.hotkey_ok, self.hotkey_msg = True, msg
+        elif str(text).lower() == "off":
+            write_hotkey(self.home, "off")
+            self.hotkey_msg = msg
+            ok = True
+        return ok, msg
+
+    def _kproc(self, hwnd, msg, wp, lp):
+        from .hotkey import BadHotkey, from_control
+        u = self.u
+        try:
+            if msg == WM_COMMAND:
+                cid = wp & 0xFFFF
+                if cid == ID_SAVE:
+                    try:
+                        text = from_control(u.SendMessageW(self.khot, 0x402, 0, 0) & 0xFFFF)          # HKM_GETHOTKEY
+                    except BadHotkey as e:
+                        u.SetWindowTextW(self.klabel, f"{e}. Click the box and press the keys again.")
+                        return 0
+                    ok, message = self.apply_shortcut(text)
+                    if ok:
+                        self._close_shortcut_box()
+                    else:
+                        u.SetWindowTextW(self.klabel, message + " Try another one.")
+                elif cid == ID_OFF:
+                    self.apply_shortcut("off")
+                    self._close_shortcut_box()
+                elif cid == ID_CANCEL:
+                    self._close_shortcut_box()
+                return 0
+            if msg == WM_CLOSE:
+                self._close_shortcut_box()
+                return 0
+        except Exception:
+            pass
+        return u.DefWindowProcW(hwnd, msg, wp, lp)
+
+    def _say(self, text: str) -> None:
+        """A short message from the notification-area icon (best effort)."""
+        try:
+            if self.tray is not None:
+                self.tray.notify(text, "Deskhand")
+        except Exception:
+            pass
+
     def quit(self) -> None:
         self.quitting = True
+        if self.hotkey_ok:
+            from .hotkey import unregister
+            unregister(self.hwnd, HOTKEY_ID)
         self.sup.stop()
         if self.tray is not None:
             try:
@@ -247,10 +401,15 @@ class DeskhandApp:
                     self.toggle()
                 elif cid == ID_QUIT:
                     self.quit()
+                elif cid == ID_KEY:
+                    self.change_shortcut()
                 return 0
             if msg == 0x0138:                                  # WM_CTLCOLORSTATIC: text boxes blend into the white window
                 self.g.SetBkMode(wp, 1)                       # TRANSPARENT
                 return u.GetSysColorBrush(5)
+            if msg == WM_HOTKEY and wp == HOTKEY_ID:
+                self.open_voice()
+                return 0
             if msg == WM_TIMER:
                 self._refresh()
                 return 0
@@ -262,6 +421,9 @@ class DeskhandApp:
                 return 0
             if msg == MSG_QUIT:
                 self.quit()
+                return 0
+            if msg == MSG_SHORTCUT:
+                self.change_shortcut()
                 return 0
             if msg == MSG_RESTART:
                 self.restart_for_update()
@@ -288,6 +450,7 @@ class DeskhandApp:
         menu = pystray.Menu(
             pystray.MenuItem("Open Deskhand window", post(MSG_SHOW), default=True),
             pystray.MenuItem("Open the Deskhand app in the browser", lambda icon, item: self.open_web()),
+            pystray.MenuItem("Change the voice shortcut...", post(MSG_SHORTCUT)),
             pystray.MenuItem(lambda item: "Resume" if self.paused else "Pause", post(MSG_TOGGLE)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit Deskhand", post(MSG_QUIT)),
@@ -298,7 +461,17 @@ class DeskhandApp:
     def run(self) -> int:
         u = self.u
         self.start_tray()
+        try:
+            from . import uninstall
+            uninstall.register(self.home)                      # lists Deskhand under Settings > Apps, with an Uninstall button
+        except Exception:
+            pass                                               # never let this stop the app
         self.sup.start()
+        from .hotkey import read_hotkey, register
+        self.hotkey_ok, self.hotkey_msg = register(self.hwnd, HOTKEY_ID, read_hotkey(self.home))
+        self._set_hint()
+        if not self.hotkey_ok and self.hotkey_msg:
+            self._say(self.hotkey_msg)
         self._refresh()
         if not self.start_hidden:
             self.show()

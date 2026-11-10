@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deskhand</title>
+<style>
+  :root { --bg:#07071D; --surface:#11102b; --line:#363255; --text:#efe8ec; --muted:#b3a6bf; --primary:#7974C3;
+          --good:#74c9a0; --bad:#e0795c; --warn:#e3b07a; }
+  * { box-sizing: border-box; }
+  body { margin:0; width:320px; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line); }
+  header img { width:28px; height:28px; border-radius:7px; }
+  header b { font-size:16px; letter-spacing:.2px; }
+  main { padding:16px; display:grid; gap:12px; }
+  .status { display:flex; gap:10px; align-items:flex-start; background:var(--surface); border:1px solid var(--line);
+            border-radius:12px; padding:12px; }
+  .dot { width:10px; height:10px; border-radius:50%; margin-top:5px; background:var(--muted); flex:none; }
+  .dot.connected { background:var(--good); } .dot.pairing { background:var(--warn); } .dot.denied { background:var(--bad); }
+  .status strong { display:block; } .status span { color:var(--muted); font-size:13px; }
+  button { font:inherit; border:0; border-radius:10px; padding:10px 12px; cursor:pointer; background:var(--primary); color:#07071D;
+           font-weight:600; width:100%; }
+  button.quiet { background:transparent; color:var(--muted); border:1px solid var(--line); font-weight:500; }
+  button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+  p { margin:0; color:var(--muted); font-size:12.5px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header><img src="icons/icon48.png" alt=""><b>Deskhand</b></header>
+<main>
+  <div class="status"><i class="dot" id="dot"></i><div><strong id="title">Checking…</strong><span id="detail"></span></div></div>
+  <button id="pair" hidden>Connect to Deskhand</button>
+  <button id="forget" class="quiet" hidden>Disconnect this browser</button>
+  <p>Deskhand only controls this browser while you have asked it to do a task. It does not ask for your cookies or
+     passwords, and it only talks to the Deskhand app on this computer.</p>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@ from ..policy import Policy
 from ..protocol import ActionRequest, ActionResult, GUI_TOOLS, Screenshot
 from .backend import Backend
 from .gate import window_access, window_allowed
+from .polite import Politeness, needs_foreground
 from ..tools import ToolContext, get_registry
 from ..tools.registry import NeedsAccess
 from .runner import ManagedProcesses, run_command
@@ -36,6 +37,13 @@ class Executor:
         self.estopped = False
         self.persist = None                      # callable(kind, key, value) saving an "always" grant on this computer
         self._task_grants: dict[str, list[tuple[str, str]]] = {}      # task id -> [(kind, key)] to revoke at the end
+        # manners: wait for the owner to pause before taking the mouse/keyboard/front window; put their window back after
+        self.polite = Politeness(enabled=policy.polite, idle_s=policy.polite_idle_s, max_wait_s=policy.polite_max_wait_s,
+                                 idle_source=getattr(backend, "user_idle_s", None))
+        try:
+            backend.polite = self.polite
+        except Exception:
+            pass
 
     # ------------------------------------------------------------ control
     def lookup(self, action_id: str) -> ActionResult | None:
@@ -51,6 +59,10 @@ class Executor:
         """A task finished: take back every 'just this time' grant it was given."""
         for kind, key in self._task_grants.pop(task_id, []):
             self.policy.revoke(kind, key)
+        try:
+            self.polite.restore(task_id, self.backend.restore_user_context)
+        except Exception:
+            pass
 
     async def _grant(self, req, a, result):
         """Apply an access grant the USER approved in the app. Protected things are refused by policy.check_grant."""
@@ -125,6 +137,21 @@ class Executor:
             if not gate.allowed:
                 acc = await window_access(self.policy, b, w.title if w else "", w.process if w else "", gate)
                 return result("denied", error=f"input blocked: {gate.reason}", data={"needs_access": acc} if acc else {})
+        busy = False
+        if self.policy.polite and needs_foreground(a):             # about to take the mouse, keyboard or front window
+            self.polite.current_task = req.task_id
+            if not await asyncio.to_thread(self.polite.wait_until_idle, req.task_id):
+                return result("error", error="You are using the computer right now, so Deskhand waited and did not take over. "
+                                             "It will try this step again when you pause.")
+            await asyncio.to_thread(self.polite.remember, req.task_id, self.backend.capture_user_context)
+            busy = True
+        try:
+            return await self._run_step(req, a, b, result)
+        finally:
+            if busy:
+                self.polite.mark_own_input()
+
+    async def _run_step(self, req, a, b, result):
         try:
             t = a.tool
             if t == "app_tool":
@@ -132,7 +159,21 @@ class Executor:
                 if tool is None or tool.handler is None:      # recipes are expanded by the server
                     return result("denied", error=f"unknown tool '{a.name}'")
                 args = tool.params.model_validate(a.args)
-                data = await tool.handler(ToolContext(b, self.policy, self.managed, req.task_id), args)
+                # Acting on a control by name needs no focus, but some apps pull themselves to the front when touched. Note what
+                # the person had in front, and put it back if the app took over.
+                keep = (await asyncio.to_thread(b.capture_user_context)
+                        if self.policy.polite and a.name.startswith("ui.") and a.name not in ("ui.snapshot", "ui.read", "ui.read_page", "ui.wait")
+                        else None)
+                try:
+                    data = await tool.handler(ToolContext(b, self.policy, self.managed, req.task_id), args)
+                finally:
+                    if keep:
+                        now = await asyncio.to_thread(b.capture_user_context)
+                        if now and now.get("hwnd") != keep.get("hwnd") and self.polite.user_idle_s() >= 0.0:
+                            try:
+                                await asyncio.to_thread(b.restore_user_context, {"hwnd": keep.get("hwnd")})
+                            except Exception:
+                                pass
                 shot = data.pop("_screenshot", None)
                 if data.get("error"):
                     return result("error", error=str(data["error"]), data=data)
@@ -142,19 +183,29 @@ class Executor:
                     w = await asyncio.to_thread(b.active_window)
                     gate = await window_allowed(self.policy, b, w.title if w else "", w.process if w else "")
                     if not gate.allowed:
-                        # Something else is in front. If an approved window exists (e.g. the page just opened),
-                        # bring it forward and look again; otherwise refuse - nothing else is ever captured.
+                        # Something else is in front (the person's own work). If an approved window exists, capture THAT window
+                        # directly, even while others cover it: nothing is brought forward and nothing else is in the picture.
+                        cands = []
                         try:
-                            cands = []
                             for x in await asyncio.to_thread(b.list_windows):
                                 if (await window_allowed(self.policy, b, x["title"], x["process"])).allowed:
                                     cands.append(x)
-                            if cands:
+                        except Exception:
+                            cands = []
+                        for x in cands:
+                            try:
+                                return result(screenshot=await asyncio.to_thread(b.screenshot_window_titled, x["title"], a.max_dimension))
+                            except NotImplementedError:
+                                break                                  # this backend cannot: fall back to bringing it forward
+                            except Exception:
+                                continue
+                        if cands and not (self.policy.polite and self.polite.user_idle_s() < self.polite.idle_s):
+                            try:                                       # nobody is using the computer: bringing it forward harms no one
                                 await asyncio.to_thread(b.focus_window, cands[0]["title"])
                                 w = await asyncio.to_thread(b.active_window)
                                 gate = await window_allowed(self.policy, b, w.title if w else "", w.process if w else "")
-                        except Exception:
-                            pass
+                            except Exception:
+                                pass
                     if not gate.allowed:
                         acc = await window_access(self.policy, b, w.title if w else "", w.process if w else "", gate)
                         return result("denied", error=f"screenshot not taken (privacy mode): {gate.reason}",

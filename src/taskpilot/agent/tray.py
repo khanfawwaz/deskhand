@@ -35,6 +35,18 @@ def read_status(home: Path, now: float | None = None) -> tuple[str, str]:
     return "connecting", "Starting: connecting to the server"
 
 
+def read_activity(home: Path, now: float | None = None) -> str:
+    """'working', 'waiting' (for the person to pause) or '' when Deskhand is doing nothing."""
+    now = time.time() if now is None else now
+    try:
+        d = json.loads((home / "activity.json").read_text(encoding="utf-8-sig"))
+        if now - float(d.get("at", 0)) < 300 and d.get("state") in ("working", "waiting"):
+            return str(d["state"])
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
 def app_url(home: Path) -> str:
     try:
         cfg = json.loads((home / "agent.json").read_text(encoding="utf-8-sig"))
@@ -49,7 +61,8 @@ def badge(state: str, size: int = 64):
     from PIL import Image, ImageDraw
     from ..branding import draw_icon
     img = draw_icon(size)
-    colour = {"online": (62, 207, 142), "connecting": (245, 185, 66)}.get(state, (140, 140, 150))
+    colour = {"online": (62, 207, 142), "connecting": (245, 185, 66), "working": (110, 217, 135),
+              "waiting": (245, 185, 66)}.get(state, (140, 140, 150))
     d = ImageDraw.Draw(img)
     r = size * 0.16
     cx, cy = size - r - 1, size - r - 1

@@ -42,13 +42,37 @@ def write_status(connected: bool, device_id: str = "") -> None:
         os.replace(tmp, Path(home) / "status.json")
     except OSError:
         pass
+
+
+def write_activity(state: str) -> None:
+    """What Deskhand is doing right now ('working', 'waiting' for the person to pause, 'idle'), for the tray icon."""
+    home = os.environ.get("PILOT_HOME")
+    if not home:
+        return
+    try:
+        tmp = Path(home) / "activity.json.tmp"
+        tmp.write_text(json.dumps({"state": state, "at": time.time()}), encoding="utf-8")
+        os.replace(tmp, Path(home) / "activity.json")
+    except OSError:
+        pass
+
+
 RESTART_FOR_UPDATE = 75
+
+
+def extension_connected() -> bool:
+    """Is the Deskhand Chrome extension paired and connected right now? Told to the server so the web app can show it."""
+    try:
+        from .extbridge import get_bridge
+        return bool(get_bridge().connected)
+    except Exception:
+        return False
 
 
 async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbeat_s: float) -> None:
     async with websockets.connect(url, max_size=32 * 1024 * 1024, ping_interval=None) as ws:
         await ws.send(json.dumps({"type": "hello", "device_id": device_id, "token": token,
-                                  "capabilities": CAPABILITIES}))
+                                  "capabilities": CAPABILITIES, "extension": extension_connected()}))
         ack = json.loads(await ws.recv())
         if ack.get("type") != "welcome":
             raise PermissionError(f"server rejected agent: {ack}")
@@ -58,7 +82,7 @@ async def serve_once(url: str, device_id: str, token: str, ex: Executor, heartbe
         async def beat():
             while True:
                 await asyncio.sleep(heartbeat_s)
-                await ws.send(json.dumps({"type": "heartbeat"}))
+                await ws.send(json.dumps({"type": "heartbeat", "extension": extension_connected()}))
                 write_status(True, device_id)
 
         async def run_action(msg):
@@ -117,8 +141,8 @@ async def update_loop(cfg: dict, token: str) -> None:
     """Poll the server for a newer agent. Returns once one is staged and the agent is idle (then we restart)."""
     from .updater import stage_update
     home, version = os.environ.get("PILOT_HOME"), os.environ.get("PILOT_VERSION")
-    if not home or not version:
-        await asyncio.Future()                            # running from source: never updates, never finishes
+    if not home or not version or cfg.get("no_update"):
+        await asyncio.Future()                            # running from source (or told not to): never updates, never finishes
     apps = Path(home) / "apps"
     every = float(cfg.get("update_check_s", 900))
     await asyncio.sleep(60)
@@ -210,6 +234,17 @@ def main() -> None:
     from .backend import WindowsBackend
     ex = Executor(WindowsBackend(), Policy.from_dict(cfg.get("policy", {})))
     ex.persist = lambda kind, key, value: save_grant(args.config, kind, key, value)
+    ex.polite.on_state = write_activity
+    try:                                                  # the shortcut's prompt needs somewhere to send what you say
+        from .voice import start_for_helper
+        start_for_helper(cfg, token)
+    except Exception:
+        log.warning("the voice prompt could not start", exc_info=True)
+    try:                                                  # let the Deskhand Chrome extension pair and connect any time
+        from .extbridge import get_bridge
+        get_bridge()
+    except Exception:
+        pass
     sys.exit(asyncio.run(run_agent(cfg, token, ex)))
 
 

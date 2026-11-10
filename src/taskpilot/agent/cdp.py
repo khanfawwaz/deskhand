@@ -25,7 +25,7 @@ class BridgeError(RuntimeError):
 
 def profile_dir() -> Path:
     root = os.environ.get("LOCALAPPDATA") or str(Path.home())
-    return Path(os.environ.get("DESKHAND_CHROME_PROFILE", str(Path(root) / "Deskhand" / "chrome-debug")))
+    return Path(os.environ.get("DESKHAND_CHROME_PROFILE", str(Path(root) / "Deskhand" / "chrome-profile")))
 
 
 def chrome_path() -> str | None:
@@ -60,9 +60,17 @@ def ensure_browser(url: str = "about:blank", wait_s: float = 15.0) -> None:
     if not exe:
         raise BridgeError("Chrome was not found on this computer")
     profile_dir().mkdir(parents=True, exist_ok=True)
+    kw: dict = {}
+    if os.name == "nt":                                                # start minimised and WITHOUT taking focus
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 7                                             # SW_SHOWMINNOACTIVE
+        kw["startupinfo"] = si
     subprocess.Popen([exe, f"--remote-debugging-port={PORT}", "--remote-debugging-address=127.0.0.1",
-                      f"--user-data-dir={profile_dir()}", "--no-first-run", "--no-default-browser-check", url],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                      f"--user-data-dir={profile_dir()}", "--profile-directory=Default", "--no-first-run",
+                      "--no-default-browser-check", "--disable-backgrounding-occluded-windows",
+                      "--disable-renderer-backgrounding", "--disable-background-timer-throttling", url],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
     end = time.monotonic() + wait_s
     while time.monotonic() < end:
         if is_up():
@@ -72,7 +80,20 @@ def ensure_browser(url: str = "about:blank", wait_s: float = 15.0) -> None:
 
 
 def _pages() -> list[dict]:
-    return [t for t in _get("/json/list") if t.get("type") == "page"]
+    """Open tabs, the one in front first (several tabs can be open: sign-in pages, the user's own)."""
+    tabs = [t for t in _get("/json/list") if t.get("type") == "page" and not str(t.get("url", "")).startswith("devtools://")]
+    front = []
+    for t in tabs:
+        try:
+            pg = Page(t)
+            try:
+                if pg.js("document.visibilityState", 4.0) == "visible":
+                    front.append(t)
+            finally:
+                pg.close()
+        except Exception:
+            continue
+    return front + [t for t in tabs if t not in front]
 
 
 class Page:
@@ -146,17 +167,91 @@ def same_page(shown: str, wanted: str) -> bool:
     return host(a) == host(b) and (pa == pb or not pb) and (not b.query or a.query.split("&")[0] == b.query.split("&")[0])
 
 
+class ExtPage(Page):
+    """A tab of the user's own Chrome, spoken to through the Deskhand extension (same commands as a debugging port)."""
+
+    def __init__(self, bridge, tab_id: int):
+        self.bridge, self.tab_id = bridge, tab_id
+
+    def close(self) -> None:
+        pass
+
+    def call(self, method: str, params: dict | None = None, timeout: float = 20.0) -> dict:
+        try:
+            return self.bridge.request({"cmd": "cdp", "tabId": self.tab_id, "method": method, "params": params or {}}, timeout) or {}
+        except RuntimeError as e:
+            raise BridgeError(f"{method}: {e}") from None
+
+
+_OWNED: dict[str, int] = {}               # the tab Deskhand opened (so it does not take over the user's own tabs)
+
+
+def _ext():
+    """The connected extension bridge, or None."""
+    from .extbridge import get_bridge
+    b = get_bridge()
+    if b.connected:
+        return b
+    first = not _OWNED.get("waited")                     # the extension retries every few seconds: allow one full cycle
+    _OWNED["waited"] = 1
+    return b if b.wait_connected(7.0 if first else 1.0) else None
+
+
+def _ext_current(b) -> ExtPage:
+    tabs = b.request({"cmd": "tabs"}) or []
+    if _OWNED.get("tab") in {t["id"] for t in tabs}:
+        return ExtPage(b, _OWNED["tab"])
+    # Deskhand only ever works in the window it opened itself, never in a tab the person is using
+    raise BridgeError("no page is open in Deskhand's own browser window yet: open one with web.open first")
+
+
+def _ext_open(b, url: str) -> ExtPage:
+    tab_id = b.request({"cmd": "openAgent", "url": url})["id"]       # Deskhand's own window, opened or reused, without focus
+    _OWNED["tab"] = tab_id
+    return ExtPage(b, tab_id)
+
+
+_DBG: dict[str, str] = {}                  # the debug browser: the id of the tab Deskhand opened (never the person's tabs)
+
+
+def _own_page() -> "Page | None":
+    tid = _DBG.get("target")
+    if not tid:
+        return None
+    for t in _get("/json/list"):
+        if t.get("id") == tid and t.get("type") == "page":
+            return Page(t)
+    _DBG.pop("target", None)
+    return None
+
+
+def _new_background_window() -> "Page":
+    """A window of its own, opened behind everything else: Chrome is told not to activate it."""
+    ver = _get("/json/version")
+    browser = Page({"webSocketDebuggerUrl": ver["webSocketDebuggerUrl"]})
+    try:
+        tid = browser.call("Target.createTarget", {"url": "about:blank", "newWindow": True, "background": True})["targetId"]
+    finally:
+        browser.close()
+    _DBG["target"] = tid
+    for _ in range(20):
+        p = _own_page()
+        if p is not None:
+            return p
+        time.sleep(0.1)
+    raise BridgeError("could not open Deskhand's browser window")
+
+
 def open_page(url: str) -> Page:
     """Open `url` in the Deskhand browser (reusing its current tab) and return that tab."""
+    b = _ext()
+    if b is not None:
+        return _ext_open(b, url)
     ensure_browser()
-    pages = _pages()
-    if pages:
-        p = Page(pages[0])
-    else:
-        p = Page(_get("/json/new?about:blank", method="PUT"))
+    p = _own_page() or _new_background_window()
     try:
         p.call("Page.enable")
-        p.call("Page.bringToFront")
+        p.call("Emulation.setFocusEmulationEnabled", {"enabled": True})   # works while covered by other windows; never brought forward
     except BridgeError:
         pass
     p.go(url)
@@ -164,11 +259,13 @@ def open_page(url: str) -> Page:
 
 
 def current_page() -> Page:
+    b = _ext()
+    if b is not None:
+        return _ext_current(b)
     ensure_browser()
-    pages = _pages()
-    if not pages:
-        raise BridgeError("the Deskhand browser has no open tab")
-    p = Page(pages[0])
+    p = _own_page()
+    if p is None:
+        raise BridgeError("no page is open in Deskhand's own browser window yet: open one with web.open first")
     return p
 
 
@@ -200,8 +297,12 @@ _FIND_JS = r"""
   const label = e => (e.getAttribute('aria-label') || e.innerText || e.value || e.title || '').replace(/\s+/g, ' ').trim();
   const cands = [...document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],input[type=submit],summary')]
       .filter(vis).map(e => ({e, t: label(e)})).filter(x => x.t);
-  let pick = cands.find(x => x.t.toLowerCase() === n) || cands.find(x => x.t.toLowerCase().startsWith(n))
-          || cands.find(x => x.t.toLowerCase().includes(n));
+  const inView = e => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+  const inDialog = e => !!e.closest('[role=dialog],[aria-modal=true],dialog');
+  const rank = x => (inDialog(x.e) ? 0 : 2) + (inView(x.e) ? 0 : 1);
+  const best = pred => cands.filter(pred).sort((a, b) => rank(a) - rank(b))[0];
+  let pick = best(x => x.t.toLowerCase() === n) || best(x => x.t.toLowerCase().startsWith(n))
+          || best(x => x.t.toLowerCase().includes(n));
   if (!pick) return null;
   pick.e.scrollIntoView({block: 'center', inline: 'center'});
   const r = pick.e.getBoundingClientRect();
@@ -270,7 +371,7 @@ class CdpWeb:
             p.close()
 
     def state(self, launch: bool = True) -> dict:
-        if not launch and not is_up():
+        if not launch and _ext() is None and not is_up():
             raise BridgeError("the Deskhand browser is not running")
         p = current_page()
         try:
@@ -292,7 +393,10 @@ class CdpWeb:
         try:
             before = p.url()
             r = click_text(p, text)
-            time.sleep(1.0)
+            end = time.monotonic() + 6.0                       # buttons (Play...) navigate a moment later, not at once
+            while time.monotonic() < end and p.url() == before:
+                time.sleep(0.5)
+            time.sleep(0.5)
             p.wait_loaded(timeout=15)
             return {**r, "address": p.url(), "title": p.title(), "moved": p.url() != before}
         finally:

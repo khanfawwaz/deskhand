@@ -334,8 +334,15 @@ def _escape_sendkeys(text: str) -> str:
     return "".join("{{}" if ch == "{" else "{}}" if ch == "}" else ch for ch in text)   # one pass: no double-escaping
 
 
-def act(win: dict, sel: dict, action: str, text: str | None = None) -> dict:
-    """action: click | double_click | type | read. Returns a dict; {'error': ...} on failure."""
+BUSY = "You are using the computer right now, so Deskhand waited and did not take over your mouse or keyboard. It will try again when you pause."
+
+
+def act(win: dict, sel: dict, action: str, text: str | None = None, before_input=None, after_input=None) -> dict:
+    """action: click | double_click | type | read. Returns a dict; {'error': ...} on failure.
+
+    Controls are driven by name (Invoke, Toggle, Select, SetValue): that needs neither the mouse nor the keyboard nor focus, so it
+    can run while the person works. Only when a control offers no such pattern is the real mouse or keyboard used, and then
+    `before_input` (wait for the person to pause) and `after_input` (note that the input was ours) are called."""
     with _Com():
         el, err = _pick(win, sel, action)
         if err:
@@ -364,9 +371,17 @@ def act(win: dict, sel: dict, action: str, text: str | None = None) -> dict:
                         if p is not None:
                             call(p)
                             return {"method": method, "element": desc}
+                    if before_input is not None and not before_input():
+                        return {"error": BUSY, "element": desc}
                     c.Click(simulateMove=False)
+                    if after_input is not None:
+                        after_input()
                     return {"method": "mouse", "element": desc}
+                if before_input is not None and not before_input():
+                    return {"error": BUSY, "element": desc}
                 c.DoubleClick(simulateMove=False)
+                if after_input is not None:
+                    after_input()
                 return {"method": "mouse", "element": desc}
 
             if action == "type":
@@ -384,9 +399,13 @@ def act(win: dict, sel: dict, action: str, text: str | None = None) -> dict:
                         return {"method": "value", "element": desc, "readback_available": True,
                                 "value_after": after[:2000]}
                     # Rich editors (chat composers) accept SetValue silently without showing it: type for real.
+                if before_input is not None and not before_input():
+                    return {"error": BUSY, "element": desc}
                 c.SetFocus()
                 time.sleep(0.15)
                 c.SendKeys(_escape_sendkeys(text or ""), interval=0.01, waitTime=0.05)
+                if after_input is not None:
+                    after_input()
                 after = None
                 try:
                     after = _read(el)[0][:2000]
