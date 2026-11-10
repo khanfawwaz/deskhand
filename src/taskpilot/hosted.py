@@ -6,6 +6,7 @@ import os
 
 import httpx
 
+from .usage import report_usage
 from .model import ModelContext, ModelRuntime, OllamaRuntime, render_user_message
 from .prompts import build_system_prompt
 
@@ -58,7 +59,10 @@ class OpenAICompatRuntime(ModelRuntime):
                     continue
                 if r.status_code >= 400:
                     raise RuntimeError(f"vision model API error HTTP {r.status_code}: {r.text[:200]}")
-                msg = (r.json()["choices"][0].get("message") or {})
+                data = r.json()
+                u = data.get("usage") or {}
+                report_usage(self.model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0), "vision")
+                msg = (data["choices"][0].get("message") or {})
                 return (msg.get("content") or "").strip()[:6000]
         return ""
 
@@ -98,7 +102,10 @@ class OpenAICompatRuntime(ModelRuntime):
                     continue
                 if r.status_code >= 400:
                     raise RuntimeError(f"model API error HTTP {r.status_code}: {r.text[:200]}")
-                choice = r.json()["choices"][0]
+                data = r.json()
+                u = data.get("usage") or {}
+                report_usage(self.model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0), "decide")
+                choice = data["choices"][0]
                 msg = choice.get("message") or {}
                 content = msg.get("content") or ""
                 if not content.strip():

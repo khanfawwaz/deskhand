@@ -65,6 +65,8 @@ class RecipeRunIn(BaseModel):
 def create_app(store: Store, hub: DeviceHub, orch: Orchestrator, admin_key: str) -> FastAPI:
     app = FastAPI(title="TaskPilot", version="0.1.0")
     sockets: dict[str, WebSocket] = {}
+    ext_status: dict[str, bool] = {}                 # device_id -> is its Chrome extension connected right now (told by the helper)
+    app.state.ext_status = ext_status
     sync_recipe_tools(get_registry(), store)        # approved recipes become tools the model can call
 
     def auth(x_api_key: str = Header(default="")) -> None:
@@ -237,6 +239,7 @@ def create_app(store: Store, hub: DeviceHub, orch: Orchestrator, admin_key: str)
                 except Exception:
                     pass
             sockets[device_id] = ws
+            ext_status[device_id] = bool(hello.get("extension"))
             hub.register(device_id, conn)
             await ws.send_text(json.dumps({"type": "welcome"}))
             while True:
@@ -246,6 +249,8 @@ def create_app(store: Store, hub: DeviceHub, orch: Orchestrator, admin_key: str)
                     break
                 if msg.get("type") == "heartbeat":
                     store.touch_device(device_id)
+                    if "extension" in msg:
+                        ext_status[device_id] = bool(msg["extension"])
                 else:
                     conn.on_message(msg)
         except (WebSocketDisconnect, json.JSONDecodeError, RuntimeError):
@@ -256,8 +261,13 @@ def create_app(store: Store, hub: DeviceHub, orch: Orchestrator, admin_key: str)
                 hub.unregister(device_id, conn)
                 if sockets.get(device_id) is ws:
                     sockets.pop(device_id, None)
+                    ext_status.pop(device_id, None)
 
     install_client_api(app, store, hub, orch, auth)      # pairing, /v1 for the Pilot app, and /app itself
+    from .legalpages import install_legal_pages
+    install_legal_pages(app)                             # /privacy and /terms: clean addresses, no ".html"
+    from .spa import install_spa
+    install_spa(app)                                     # the new React app at /app-next/ (only once it has been built)
     return app
 
 
@@ -314,9 +324,32 @@ def main() -> None:
             model = make_runtime(args.provider, args.model, base_url=args.base_url, api_key_env=args.api_key_env,
                                  allow_cloud_images=args.allow_cloud_images)
 
+    meter = gate = None
+    if not args.demo:                                     # one shared door to the model: queue, rate pacing, usage, spend cap
+        from .modelgate import ModelGate
+        from .usage import Limits, UsageMeter
+        meter = UsageMeter(store, Limits.from_env())
+        gate = model = ModelGate.from_env(model, meter)
+        lim = meter.limits
+        print(f"model gate: {gate.max_concurrent} calls at once ({gate.per_workspace} per workspace), "
+              f"{'no' if not gate.rpm else gate.rpm} per-minute limit; daily budget "
+              f"{'$%.2f' % lim.daily_budget_usd if lim.daily_budget_usd else 'off'}, token cap {lim.daily_token_cap or 'off'}")
     orch = Orchestrator(store, hub, model, policy, Config(record_recipes=args.record_recipes))
     app = create_app(store, hub, orch, key)
-    shown = "localhost" if args.host in ("0.0.0.0", "127.0.0.1") else args.host
+    app.state.meter, app.state.gate = meter, gate
+
+    from . import datarights                              # old history is removed on a schedule (see the privacy policy)
+    task_days, usage_days = datarights.retention_days()
+    print("retention: task history " + (f"{task_days} days" if task_days else "kept forever")
+          + ", model-usage counts " + (f"{usage_days} days" if usage_days else "kept forever"))
+
+    def _run_retention() -> None:                          # its own thread + loop: works on any FastAPI/Starlette version
+        import asyncio
+        asyncio.run(datarights.retention_loop(store))
+
+    import threading
+    threading.Thread(target=_run_retention, name="retention", daemon=True).start()
+    shown ="localhost" if args.host in ("0.0.0.0", "127.0.0.1") else args.host
     print(f"\nPilot app:  http://{shown}:{args.port}/app/   (on other devices use this machine's Tailscale address)")
     print(f"Pairing code for a new device (valid 10 min): {app.state.pairing.create()}\n")
     uvicorn.run(app, host=args.host, port=args.port)

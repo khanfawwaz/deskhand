@@ -39,7 +39,7 @@ class AuthSettings:
     mailer: Any = None                                   # object with .send(to, subject, text, html)
     signup: str = "closed"                               # open = anyone may create a workspace; closed = existing users only
     allowed_domains: list[str] = field(default_factory=list)     # [] = any domain
-    max_workspaces: int = 25
+    max_workspaces: int = 1000
     default_quota: int = 30                              # tasks/day for a self-service workspace
     public_url: str = ""                                 # origin used in the email link; blank = whatever the caller used
     per_ip_hour: int = 10
@@ -48,12 +48,19 @@ class AuthSettings:
     @classmethod
     def from_env(cls) -> "AuthSettings":
         mailer = from_env()
-        mode = os.environ.get("TASKPILOT_SIGNUP") or ("open" if mailer else "closed")
+        mode = os.environ.get("TASKPILOT_SIGNUP") or "open"          # anyone may sign up; set TASKPILOT_SIGNUP=closed to stop it
         doms = [d.strip().lower() for d in os.environ.get("TASKPILOT_SIGNUP_DOMAINS", "").split(",") if d.strip()]
         return cls(mailer=mailer, signup=mode, allowed_domains=doms,
-                   max_workspaces=int(os.environ.get("TASKPILOT_MAX_WORKSPACES", "25")),
+                   max_workspaces=int(os.environ.get("TASKPILOT_MAX_WORKSPACES", "1000")),
                    default_quota=int(os.environ.get("TASKPILOT_SIGNUP_TASKS_PER_DAY", "30")),
                    public_url=os.environ.get("TASKPILOT_PUBLIC_URL", "").rstrip("/"))
+
+
+def extension_url() -> str:
+    """Where to get the Deskhand Chrome extension (TASKPILOT_EXTENSION_URL), or '' while it is not published.
+    Only a plain https link is ever passed to the page: nothing else can become a clickable link there."""
+    u = os.environ.get("TASKPILOT_EXTENSION_URL", "").strip()
+    return u if u.lower().startswith("https://") and len(u) < 400 and " " not in u else ""
 
 
 def clean_email(raw: str) -> str:
@@ -128,7 +135,8 @@ def install_login(app: FastAPI, store, pairing_cls, settings: AuthSettings | Non
     @app.get("/v1/auth/config")
     def config():
         a = app.state.auth
-        return {"email_login": a.signup == "open" or a.mailer is not None, "signup": a.signup}
+        return {"email_login": a.signup == "open" or a.mailer is not None, "signup": a.signup,
+                "extension_url": extension_url()}
 
     @app.post("/v1/auth/email", status_code=202)
     async def request_login(body: EmailIn, request: Request):

@@ -43,7 +43,7 @@ def test_prompt_is_generated_from_registry_and_variants():
     assert "EXAMPLES" in p and "cannot_proceed" in p and "capture_screen" in p
     nv = build_system_prompt(vision=False)
     assert "No screenshots are available" in nv and "No screenshots are available" not in p
-    assert len(p) < 12800                                  # stays compact (raised for the ask-the-user rules and web.search)
+    assert len(p) < 13400                                  # stays compact (raised for the ask-the-user rules and web.search)
 
 
 def test_agent_advertises_registry_tools():

@@ -123,6 +123,45 @@ def _send_only(p: dict) -> bool:
     return p.get("tool") == "ui.click" and "send" in str(args.get("name", "")).lower()
 
 
+def yt_subscription_newest() -> V.Verifier:
+    """The video that is playing must be the newest one in the signed-in user's own Subscriptions feed (read after the run)."""
+    async def fn(c):
+        web = c.backend.web()
+        if web is None:
+            return None, "no browser bridge to check with"
+        try:
+            st = web.state(False)
+            m = re.search(r"[?&]v=([\w-]{11})", st["address"])
+            if not m:
+                return False, f"the browser is on {st['address'][:80]}, not a video"
+            web.open("https://www.youtube.com/feed/subscriptions")
+            if "sign in" in web.text(1500)["text"].lower()[:300]:
+                return None, "YouTube is not signed in in the Deskhand browser"
+            top = [re.search(r"[?&]v=([\w-]{11})", l["href"]).group(1)
+                   for l in web.links(20, 60, 0)["links"] if re.search(r"[?&]v=([\w-]{11})", l["href"])]
+            top = list(dict.fromkeys(top))[:12]
+            if not top:
+                return None, "the Subscriptions feed showed no videos"
+            return m.group(1) in top, f"playing {m.group(1)}; among the feed's first {len(top)} videos: {m.group(1) in top}"
+        except Exception as e:
+            return None, f"could not check: {type(e).__name__}: {e}"[:160]
+    return V.external("playing the newest video in the user's Subscriptions feed", fn)
+
+
+def netflix_playing() -> V.Verifier:
+    async def fn(c):
+        web = c.backend.web()
+        if web is None:
+            return None, "no browser bridge to check with"
+        try:
+            st = web.state(False)
+        except Exception as e:
+            return None, f"could not read the browser: {e}"[:120]
+        ok = "netflix.com/watch/" in st["address"]
+        return ok, f"browser is on {st['address'][:80]} titled {st['title'][:50]!r}"
+    return V.external("a Netflix title is playing (address is /watch/)", fn)
+
+
 def live_suite() -> list[TaskSpec]:
     yt_channel = "https://www.youtube.com/@BattleBots/videos"
     chat = lambda site, host, win: TaskSpec(           # noqa: E731
@@ -137,28 +176,36 @@ def live_suite() -> list[TaskSpec]:
                  [V.completed(), V.control_value("Calculator", {"id": "CalculatorResults"}, contains="12"),
                   V.result_has("12"), V.max_steps(14), V.few_refusals(2)],
                  windows=["Calculator"], approved_apps={"calc": r"C:\Windows\System32\calc.exe"}, max_actions=20,
-                 timeout_s=150, tags=frozenset({"live", "gui"})),
+                 timeout_s=150, tags=frozenset({"live", "gui", "simple"})),
         TaskSpec("live.file_roundtrip", "Create the file {sandbox}/note.txt containing exactly: hello eval. "
                  "Then read it back and tell me what it says.", "files",
                  [V.completed(), V.file_text("note.txt", equals="hello eval"), V.result_has("hello eval"), V.max_steps(6)],
-                 max_actions=10, timeout_s=90, tags=frozenset({"live"})),
+                 max_actions=10, timeout_s=90, tags=frozenset({"live", "simple"})),
         TaskSpec("live.youtube_newest", "Open youtube and play the latest video from battle bots", "web",
                  [V.completed(), newest_video_matches(yt_channel), V.max_steps(14), V.few_refusals(3), V.grounded()],
                  windows=["YouTube", "BattleBots"], hosts=["youtube.com"], max_actions=30, timeout_s=300,
-                 tags=frozenset({"live", "network", "gui"})),
+                 tags=frozenset({"live", "network", "gui", "simple"})),
         TaskSpec("live.news", "Research on what is the new AI news today", "research",
                  [V.completed(), V.result_min(250), V.result_matches(r"\bAI\b|artificial intelligence|OpenAI|Anthropic|Nvidia|Google",
                                                                       "result is about AI news"),
                   V.used("ui.read_page", "ui.snapshot", "ui.read"), V.max_steps(16), V.grounded()],
-                 windows=["Google News"], max_actions=26, timeout_s=300, tags=frozenset({"live", "network", "gui"})),
+                 windows=["Google News"], max_actions=26, timeout_s=300, tags=frozenset({"live", "network", "gui", "simple"})),
         TaskSpec("live.youtube_ssundeeplus", "Can you open youtube and play the latest video from Ssundeeplus", "web",
                  [V.completed(), newest_video_matches("https://www.youtube.com/@SSundeePlus/videos"), V.max_steps(25), V.grounded()],
                  windows=["YouTube", "SSundee"], hosts=["youtube.com"], max_actions=40, timeout_s=420,
-                 tags=frozenset({"live", "network", "gui"})),
+                 tags=frozenset({"live", "network", "gui", "simple"})),
         TaskSpec("live.networkchuck_paperclip", "Open youtube and play the video from NetworkChuck where he talks about the paperclip",
                  "web", [V.completed(), search_result_playing("NetworkChuck paperclip", "NetworkChuck"), V.max_steps(25), V.grounded()],
                  windows=["YouTube", "Paperclip", "NetworkChuck"], hosts=["youtube.com"], max_actions=40, timeout_s=420,
-                 tags=frozenset({"live", "network", "gui"})),
+                 tags=frozenset({"live", "network", "gui", "simple"})),
+        TaskSpec("live.youtube_subscriptions", "Open youtube and play the newest video from my subscriptions", "web",
+                 [V.completed(), yt_subscription_newest(), V.max_steps(20), V.grounded()],
+                 windows=["YouTube"], hosts=["youtube.com"], max_actions=30, timeout_s=300,
+                 tags=frozenset({"live", "network", "gui", "signed_in", "simple"})),
+        TaskSpec("live.netflix_play", "Open Netflix and play something for me", "web",
+                 [V.completed(), netflix_playing(), V.max_steps(20), V.grounded()],
+                 windows=["Netflix"], hosts=["netflix.com"], max_actions=30, timeout_s=300,
+                 tags=frozenset({"live", "network", "gui", "signed_in", "simple"})),
         chat("chatgpt", "chatgpt.com", "ChatGPT"),
         chat("claude", "claude.ai", "Claude"),
     ]

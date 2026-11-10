@@ -20,6 +20,17 @@ PLAYBOOKS: list[dict] = [
         "web.url shows an address with /watch (or /shorts/): finish with outcome done and cite the video title. "
         "Without the web tools: browser.open_url (the normal browser; never a private window), then ui.snapshot role=Hyperlink min_chars=25 lists the newest videos; take "
         "a screenshot (capture_screen) if the list looks wrong.")},
+    {"name": "Netflix", "keywords": ("netflix",), "text": (
+        "Use the web tools. web.open https://www.netflix.com/browse (the user is already signed in; if you land on a sign-in "
+        "page, stop and ask the user to sign in, never type credentials). If a 'Who's watching?' profile screen appears, "
+        "web.click the profile the user named, otherwise the first profile. For a named title: web.search it (or web.open "
+        "https://www.netflix.com/search?q=<title>), web.links, web.click the title, then web.click 'Play'. For 'something': "
+        "web.links on the browse page and pick a title that shows a Play button or a Continue Watching row. SUCCESS: web.url "
+        "shows an address containing /watch/: finish with outcome done and name the title.")},
+    {"name": "YouTube subscriptions", "keywords": ("my subscriptions", "my subscription", "subscribed"), "text": (
+        "The user is signed in to YouTube in this browser. Their subscriptions feed is "
+        "https://www.youtube.com/feed/subscriptions (newest uploads first): web.open it, web.links, web.click the first video "
+        "title. If the page asks to sign in, stop and ask the user; never type credentials.")},
     {"name": "News research", "keywords": ("news", "research"), "text": NORMAL + (
         "For today's news use https://news.google.com/search?q=<words>+when:1d (for AI: q=artificial+intelligence+"
         "OR+AI+when:1d). Read the headlines straight from that results page: ui.snapshot with name_chars=200 "
@@ -95,6 +106,8 @@ def final_address_for(goal: str) -> tuple[str, ...]:
     g = goal.lower()
     if re.search(r"\b(youtube|you tube)\b", g) and re.search(r"\b(play|watch|run)\b", g):
         return ("/watch", "/shorts/", "/live/")
+    if re.search(r"\bnetflix\b", g) and re.search(r"\b(play|watch|run)\b", g):
+        return ("/watch/",)
     return ()
 
 

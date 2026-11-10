@@ -235,6 +235,27 @@ class MongoStore:
     def delete_skill(self, workspace: str, key: str) -> bool:
         return self._db.skills.delete_one({"_id": f"{workspace}:{key}"}).deleted_count > 0
 
+    # -------------------------------------------------------------- preferences (things the person asked to be remembered)
+    def add_preference(self, workspace: str, text: str) -> str:
+        from .prefs import MAX_PER_WORKSPACE
+        text = text.strip()
+        for d in self._db.preferences.find({"workspace": workspace}):
+            if str(d.get("text", "")).strip().lower() == text.lower():
+                return d["_id"]
+        pid = "p_" + uuid.uuid4().hex[:10]
+        self._db.preferences.insert_one({"_id": pid, "workspace": workspace, "text": text, "created_at": self._created_at()})
+        extra = [d["_id"] for d in self._db.preferences.find({"workspace": workspace}).sort("created_at", -1).skip(MAX_PER_WORKSPACE)]
+        if extra:
+            self._db.preferences.delete_many({"_id": {"$in": extra}})
+        return pid
+
+    def list_preferences(self, workspace: str, limit: int = 100) -> list[dict]:
+        return [{"id": d["_id"], "text": d["text"], "created_at": d["created_at"]}
+                for d in self._db.preferences.find({"workspace": workspace}).sort("created_at", -1).limit(limit)]
+
+    def delete_preference(self, workspace: str, pid: str) -> bool:
+        return self._db.preferences.delete_one({"_id": pid, "workspace": workspace}).deleted_count > 0
+
     # -------------------------------------------------------------- paired controller apps ("clients")
     def create_client(self, name: str, workspace: str = DEFAULT_WS) -> tuple[str, str]:
         cid, token = uuid.uuid4().hex[:10], secrets.token_urlsafe(32)
@@ -313,6 +334,75 @@ class MongoStore:
 
     def delete_recipe(self, name: str) -> bool:
         return self._db.recipes.delete_one({"_id": name}).deleted_count > 0
+
+    # -------------------------------------------------------------- usage (every model call)
+    def add_usage(self, rec: dict) -> None:
+        self._db.usage.insert_one({k: rec.get(k) for k in ("ts", "workspace", "task_id", "model", "kind", "prompt",
+                                                            "completion", "latency_ms", "status", "cost")})
+        self._db.usage.create_index("ts")
+
+    def usage_since(self, since: float, workspace: str | None = None) -> dict:
+        q: dict = {"ts": {"$gte": since}}
+        if workspace is not None:
+            q["workspace"] = workspace
+        tot = {"calls": 0, "prompt": 0, "completion": 0, "cost": 0.0, "errors": 0}
+        by: dict[str, dict] = {}
+        for d in self._db.usage.find(q):
+            for t in (tot, by.setdefault(d.get("workspace", ""), {"calls": 0, "prompt": 0, "completion": 0, "cost": 0.0})):
+                t["calls"] += 1
+                t["prompt"] += int(d.get("prompt") or 0)
+                t["completion"] += int(d.get("completion") or 0)
+                t["cost"] += float(d.get("cost") or 0)
+            if d.get("status", "ok") != "ok":
+                tot["errors"] += 1
+        rows = [{"workspace": w, **v} for w, v in by.items()]
+        rows.sort(key=lambda r: r["prompt"] + r["completion"], reverse=True)
+        return {**tot, "by_workspace": rows[:200]}
+
+    # -------------------------------------------------------------- the person's own data: export, delete, retention
+    def export_workspace(self, wid: str) -> dict:
+        from .datarights import build_export
+        keep = ("ts", "task_id", "model", "kind", "prompt", "completion", "latency_ms", "status", "cost")
+        usage = [{k: d.get(k) for k in keep} for d in self._db.usage.find({"workspace": wid}).sort("ts", 1)]
+        return build_export(self, wid, usage)
+
+    def _delete_task_docs(self, ids: list[str]) -> dict:
+        n = {"actions": 0, "metrics": 0}
+        if ids:
+            n["actions"] = self._db.actions.delete_many({"task_id": {"$in": ids}}).deleted_count
+            n["metrics"] = self._db.metrics.delete_many({"task_id": {"$in": ids}}).deleted_count
+        return n
+
+    def delete_tasks(self, ids: list[str]) -> int:
+        ids = list(dict.fromkeys(ids))
+        if not ids:
+            return 0
+        self._delete_task_docs(ids)
+        return self._db.tasks.delete_many({"_id": {"$in": ids}}).deleted_count
+
+    def delete_workspace_data(self, wid: str) -> dict:
+        ids = [d["_id"] for d in self._db.tasks.find({"workspace": wid}, {"_id": 1})]
+        counts = self._delete_task_docs(ids)
+        counts["transitions"] = 0                      # embedded in the task documents: they go with them
+        counts["tasks"] = self._db.tasks.delete_many({"workspace": wid}).deleted_count
+        for coll in ("devices", "clients", "experiences", "skills", "preferences", "usage"):
+            counts[coll] = self._db[coll].delete_many({"workspace": wid}).deleted_count
+        counts["workspace"] = 0 if wid == DEFAULT_WS else self._db.workspaces.delete_one({"_id": wid}).deleted_count
+        return counts
+
+    def purge_older_than(self, task_cutoff: float, usage_cutoff: float) -> dict:
+        counts = {"tasks": 0, "actions": 0, "transitions": 0, "metrics": 0, "experiences": 0, "usage": 0}
+        if task_cutoff:
+            done = [t.value for t in TERMINAL]
+            ids = [d["_id"] for d in self._db.tasks.find({"updated_at": {"$lt": task_cutoff}, "status": {"$in": done}}, {"_id": 1})]
+            counts.update(self._delete_task_docs(ids))
+            if ids:
+                counts["tasks"] = self._db.tasks.delete_many({"_id": {"$in": ids}}).deleted_count
+            counts["metrics"] += self._db.metrics.delete_many({"at": {"$lt": task_cutoff}}).deleted_count
+            counts["experiences"] = self._db.experiences.delete_many({"created_at": {"$lt": task_cutoff}}).deleted_count
+        if usage_cutoff:
+            counts["usage"] = self._db.usage.delete_many({"ts": {"$lt": usage_cutoff}}).deleted_count
+        return counts
 
     # -------------------------------------------------------------- metrics
     def add_metric(self, task_id: str | None, name: str, value_ms: float) -> None:

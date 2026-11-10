@@ -33,6 +33,8 @@ RULES
 - Saved recipes take parameters in the same form as their examples (a control NAME like Seven, not a digit like 7).
 - Pixel clicks are refused for apps that expose controls. Use ui.click by name; call ui.snapshot first.
 - To read a result that is still being produced (a chat answer), call ui.read_page: it waits until the text stops changing. Finish only after reading it, and put the result IN your message.
+- ui.* and web.* tools work on windows that are behind others: there is no need to bring a window forward first (windows.focus is for the rare control that truly needs the keyboard). The person may be using the computer: never ask them to stop.
+- When the goal is to show or play something, leave it showing: do not clear, close or undo it after you have checked it.
 - For WEBSITES prefer the web.* tools (web.open, web.search, web.links, web.click, web.url): they read the real page and its real address. Use ui.* for desktop apps.
 - In a web page seen through ui.*, controls are named by their visible text. Find one with ui.snapshot and query="<words from its text>", then ui.click it by that name. The window argument is part of the page title.
 - ui.click / ui.type need the control's name or id EXACTLY as ui.snapshot printed it. If several controls share a name, add nth.

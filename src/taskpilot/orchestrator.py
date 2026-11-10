@@ -27,6 +27,7 @@ from .protocol import (
 from .states import TERMINAL, TaskState
 from .playbooks import final_address_for
 from .store import Store
+from .usage import BudgetExceeded
 from . import skills as skillbook
 from .tools import get_registry
 
@@ -87,6 +88,16 @@ class Orchestrator:
         tid = self.store.create_task(device_id, goal, max_actions, timeout_s, permission_context)
         self._cancel[tid] = asyncio.Event()
         self._runs[tid] = asyncio.create_task(self._run(tid), name=f"task-{tid}")
+        return tid
+
+    def submit_note(self, device_id: str, goal: str, result: str, permission_context: dict | None = None) -> str:
+        """A message that needs no work on the computer (for example "remember this"): record it as an already
+        finished task carrying the reply, so it shows in the conversation. Nothing is dispatched to the device."""
+        if not self.store.device_known(device_id):
+            raise ValueError(f"device '{device_id}' is not enrolled")
+        tid = self.store.create_task(device_id, goal, 1, 30, permission_context)
+        self.store.transition(tid, TaskState.RUNNING, "saving")
+        self.store.transition(tid, TaskState.COMPLETED, "saved, nothing was run", result=result)
         return tid
 
     def submit_recipe(self, device_id: str, name: str, args: dict | None = None, timeout_s: float = 300) -> str:
@@ -217,6 +228,12 @@ class Orchestrator:
         exp_hints = self._experience_hints(task["goal"], task.get("workspace"))
         skill_map = self._skill_map(task)                 # {skill id: skill} for this workspace
         skills_shown: set[str] = set()
+        pref_text = self._preference_hints(task.get("workspace"))      # the person's own saved rules, always shown
+        if pref_text:
+            exp_hints = (pref_text + "\n" + exp_hints) if exp_hints else pref_text
+        chat_text = self._chat_history(task)                            # the earlier turns, when this continues a chat
+        if chat_text:
+            exp_hints = (chat_text + "\n" + exp_hints) if exp_hints else chat_text
         for sk in skillbook.matching(task["goal"], list(skill_map.values())):
             skills_shown.add(sk["id"])
             exp_hints = (exp_hints + "\n" if exp_hints else "") + skillbook.render(sk)
@@ -261,13 +278,16 @@ class Orchestrator:
                 screenshot_size=(shot.width, shot.height) if shot else None,
                 active_window=(shot.active_window.title if shot and shot.active_window else ""),
                 approved_apps=sorted(self.policy.approved_apps), notes=notes,
-                playbook="\n".join(x for x in (playbooks_for(task["goal"]), exp_hints) if x))
+                playbook="\n".join(x for x in (playbooks_for(task["goal"]), exp_hints) if x),
+                workspace=str(task.get("workspace") or ""), task_id=tid)
             self.store.transition(tid, TaskState.WAITING_FOR_ACTION, "awaiting model proposal")
             m0 = time.monotonic()
             try:
                 raw = await asyncio.wait_for(self.model.propose(ctx), max(1, deadline - m0))
             except asyncio.TimeoutError:
                 raise _Stop(TaskState.FAILED, "task timeout exceeded during model inference")
+            except BudgetExceeded as e:
+                raise _Stop(TaskState.FAILED, str(e))
             except Exception as e:
                 raise _Stop(TaskState.FAILED, f"model runtime error: {e!r}")
             m_ms = (time.monotonic() - m0) * 1000
@@ -593,6 +613,26 @@ class Orchestrator:
             return ""
         try:
             return hints_for(goal, self.store.list_experiences(workspace=workspace))   # never another workspace's history
+        except Exception:
+            return ""
+
+    def _chat_history(self, task: dict) -> str:
+        try:
+            from .chats import history_block
+            return history_block(self.store, task)
+        except Exception:
+            return ""
+
+    def forget(self, ids) -> None:
+        """Drop the in-memory leftovers of tasks whose chat was deleted (finished ones keep a few small objects)."""
+        for tid in ids:
+            for d in (self._runs, self._cancel, self._confirm, self._pending_action):
+                d.pop(tid, None)
+
+    def _preference_hints(self, workspace: str | None) -> str:
+        try:
+            from .prefs import render_for_model
+            return render_for_model(self.store.list_preferences(workspace or "main"))   # only this workspace's own
         except Exception:
             return ""
 

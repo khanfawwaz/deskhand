@@ -22,6 +22,8 @@ class ModelContext:
     vision: bool = True                              # may the model ever be shown a screenshot?
     playbook: str = ""                               # trusted tips for the apps named in the goal
     screen_text: str = ""                            # the screen as TEXT, written by a vision model for a text-only decider
+    workspace: str = ""                              # whose task this is (for fair queueing and usage tracking)
+    task_id: str = ""
 
 
 class ModelRuntime(ABC):

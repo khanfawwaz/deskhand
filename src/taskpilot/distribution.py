@@ -61,8 +61,13 @@ class Bundle:
 
 
 def _git_commit() -> str:
-    """Short commit of the checkout this code lives in ('' if it is not a git checkout)."""
+    """Short commit of the code that is running. A container image has no git folder, so the build stamps the commit into
+    DESKHAND_COMMIT; otherwise ask the checkout this code lives in ('' if it is not a git checkout)."""
+    import os
     import subprocess
+    stamped = os.environ.get("DESKHAND_COMMIT", "").strip()[:12]
+    if re.fullmatch(r"[0-9a-fA-F]{4,12}", stamped):
+        return stamped
     try:
         r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(PKG), capture_output=True, text=True, timeout=5)
         return r.stdout.strip() if r.returncode == 0 else ""

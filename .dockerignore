@@ -1,0 +1,17 @@
+.venv
+.git
+dist
+evals_out
+bench_results
+extension
+tests
+docs
+**/__pycache__
+*.db
+*.db-*
+.env
+server_policy.json
+.interview
+web-app/node_modules
+web-app/dist
+src/taskpilot/webapp

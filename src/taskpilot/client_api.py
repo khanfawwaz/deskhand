@@ -29,10 +29,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .datarights import CONFIRM_PHRASE
+from . import chats
+from .prefs import parse_preference
 from .states import TERMINAL
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -118,6 +121,7 @@ class TaskIn(BaseModel):
     device_id: str | None = None
     max_actions: int = Field(30, ge=1, le=60)
     timeout_s: float = Field(420, gt=0, le=900)
+    continue_from: str | None = Field(None, max_length=40)   # the task this message continues (same chat); unknown ids are ignored
 
 
 class ApproveIn(BaseModel):
@@ -127,6 +131,14 @@ class ApproveIn(BaseModel):
 class AnswerIn(BaseModel):
     choice: str | None = Field(None, max_length=60)      # one of the offered option ids
     text: str | None = Field(None, max_length=1000)      # or free text (for questions)
+
+
+class DeleteIn(BaseModel):
+    confirm: str = Field("", max_length=60)             # must be the phrase "delete my data"
+
+
+class AgentTaskIn(BaseModel):
+    goal: str = Field(min_length=1, max_length=4000)
 
 
 def _note(a: dict) -> str:
@@ -144,11 +156,21 @@ def task_view(store, orch, t: dict, steps: bool = True) -> dict:
             "tool": p.get("tool"), "reason": p.get("reason"), "question": p.get("question"),
             "params": p.get("params"), "kind": p.get("kind", "confirm"), "options": p.get("options") or [],
             "allow_text": bool(p.get("allow_text"))},
+        "continue_from": chats.continue_of(t), "thread": chats.thread_root(store, t),    # chats are threads of tasks
     }
     if steps:
         v["steps"] = [{"seq": a["seq"], "tool": a["tool"], "status": a["status"], "note": _note(a)}
                       for a in store.list_actions(t["id"])]
     return v
+
+
+def _budget_spent(meter) -> bool:
+    from .usage import BudgetExceeded
+    try:
+        meter.check("")
+        return False
+    except BudgetExceeded:
+        return True
 
 
 def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> Pairing:
@@ -171,9 +193,26 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
 
     def devices_view(ws: str) -> list[dict]:
         online = set(hub.online())
+        ext = getattr(app.state, "ext_status", {})          # told by each helper: is the Chrome extension connected?
         return [{"device_id": d["device_id"], "name": d.get("name") or d["device_id"],
-                 "online": d["device_id"] in online, "last_seen": d.get("last_seen")}
+                 "online": d["device_id"] in online, "last_seen": d.get("last_seen"),
+                 "extension": bool(ext.get(d["device_id"], False)) and d["device_id"] in online}
                 for d in store.list_devices(workspace=ws) if not d.get("revoked")]
+
+    def note_if_preference(ws: str, dev: str, goal: str, ctx: dict) -> str | None:
+        """"Remember this" / "set it as a preference" is NOT a task: save it, confirm it, and run nothing.
+        Returns the finished (no-work) task id, or None when the message is an ordinary task."""
+        pref = parse_preference(goal)
+        if pref is None:
+            return None
+        if not pref["text"]:
+            reply = ("I did not save anything: tell me what to remember, for example "
+                     "“When I say play calming music, play lofi music, save it as a preference.”")
+        else:
+            store.add_preference(ws, pref["text"])
+            reply = ("Saved as a preference: " + pref["text"] + "\nI have not done anything now. I will follow it "
+                     "the next time it applies. You can see or delete your preferences in Settings.")
+        return orch.submit_note(dev, goal.strip(), reply, ctx)
 
     def own_task(tid: str, c: dict) -> dict:
         t = store.get_task(tid)
@@ -244,15 +283,82 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
 
     @app.get("/v1/me")
     def me(c: dict = Depends(client)):
+        from .login import extension_url
         w = c["_workspace"]
         return {"client_id": c["client_id"], "name": c["name"], "workspace": {"id": w["id"], "name": w["name"]},
-                "devices": devices_view(c["workspace"])}
+                "devices": devices_view(c["workspace"]), "extension_url": extension_url()}
 
     @app.get("/v1/workspace")
     def workspace_info(c: dict = Depends(client)):
         w = c["_workspace"]
         return {"id": w["id"], "name": w["name"], "max_tasks_per_day": w["max_tasks_per_day"],
                 "tasks_24h": store.count_tasks_since(w["id"], time.time() - 86400)}
+
+    @app.get("/v1/usage")
+    def my_usage(c: dict = Depends(client)):
+        """What this workspace has used today, and how busy the shared model queue is."""
+        w = c["_workspace"]
+        meter, gate = getattr(app.state, "meter", None), getattr(app.state, "gate", None)
+        mine = meter.today(w["id"]) if meter else {"calls": 0, "tokens": 0, "token_limit": 0}
+        return {"tasks_24h": store.count_tasks_since(w["id"], time.time() - 86400), "max_tasks_per_day": w["max_tasks_per_day"],
+                "model_calls_today": mine["calls"], "tokens_today": mine["tokens"], "token_limit": mine["token_limit"],
+                "queue": ({"waiting": gate.waiting, "running": gate.in_flight} if gate else {"waiting": 0, "running": 0}),
+                "paused_for_budget": bool(meter and _budget_spent(meter))}
+
+    @app.get("/usage", dependencies=[Depends(admin_auth)])
+    def all_usage(days: int = 7):
+        """Server owner: today's totals and the budget, the model queue, and the busiest workspaces."""
+        meter, gate = getattr(app.state, "meter", None), getattr(app.state, "gate", None)
+        if meter is None:
+            raise HTTPException(404, "usage tracking is not running (demo mode)")
+        since = time.time() - max(1, min(days, 90)) * 86400
+        return {"today": meter.today(), "queue": gate.status() if gate else None,
+                f"last_{days}_days": store.usage_since(since), "workspaces": {w["id"]: w["name"] for w in store.list_workspaces()}}
+
+    # ---------------------------------------------------------------- the person's own data: take a copy, or erase it
+    data_calls: dict[str, deque] = defaultdict(deque)
+
+    def data_limit(key: str, limit: int, window: float = 3600.0) -> None:
+        """A few per hour per controller: enough for real use, not enough to hammer the database."""
+        now, q = time.monotonic(), data_calls[key]
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            raise HTTPException(429, "too many requests: try again in a little while")
+        q.append(now)
+
+    @app.get("/v1/export")
+    def export_my_data(c: dict = Depends(client)):
+        """Everything stored about this workspace as one JSON file (never sign-in tokens, never another workspace)."""
+        data_limit("export:" + c["client_id"], 6)
+        doc = store.export_workspace(c["workspace"])
+        name = "deskhand-data-" + time.strftime("%Y-%m-%d") + ".json"
+        return Response(json.dumps(doc, default=str, indent=2), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+    @app.post("/v1/delete-account")
+    async def delete_my_data(body: DeleteIn, c: dict = Depends(client)):
+        """Stop everything running, then erase this workspace: tasks and their steps, computers, signed-in devices,
+        learned notes, usage counts and the workspace itself. It cannot be undone."""
+        data_limit("delete:" + c["client_id"], 5)
+        if " ".join((body.confirm or "").lower().split()) != CONFIRM_PHRASE:
+            raise HTTPException(422, f'type "{CONFIRM_PHRASE}" to confirm')
+        return {"deleted": True, "removed": await erase_workspace(c["workspace"])}
+
+    async def erase_workspace(ws: str) -> dict:
+        await orch.emergency_stop(workspace=ws)                     # nothing may still be running on these computers
+        for _ in range(30):                                         # give the stopped tasks a moment to wind down
+            if not store.active_task_ids(ws):
+                break
+            await asyncio.sleep(0.1)
+        return store.delete_workspace_data(ws)
+
+    @app.delete("/workspaces/{wid}", dependencies=[Depends(admin_auth)])
+    async def erase_workspace_admin(wid: str):
+        """Server owner: erase one workspace for someone who cannot sign in to do it themselves (a data-deletion request)."""
+        if store.get_workspace(wid) is None:
+            raise HTTPException(404, "unknown workspace")
+        return {"deleted": True, "removed": await erase_workspace(wid)}
 
     @app.post("/v1/pair-code")
     def pair_code(c: dict = Depends(client)):
@@ -302,11 +408,17 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
             dev = pick[0]["device_id"]
         if dev not in {d["device_id"] for d in mine}:
             raise HTTPException(404, f"device '{dev}' is not enrolled")        # another workspace's laptop looks absent
+        ctx = {"client_id": c["client_id"], "via": "app"}
+        if body.continue_from:                                              # a follow-up in an open chat
+            prev = store.get_task(body.continue_from)
+            if prev and (prev.get("workspace") or "main") == ws:            # someone else's task id is silently ignored
+                ctx["continue_from"] = body.continue_from
+        if (nid := note_if_preference(ws, dev, body.goal, ctx)):
+            return {"task_id": nid, "device_id": dev}                      # a saved preference: nothing was run
         if store.count_tasks_since(ws, time.time() - 86400) >= int(w.get("max_tasks_per_day", 100)):
             raise HTTPException(429, "this workspace reached its daily task limit; try again tomorrow")
         try:
-            tid = orch.submit(dev, body.goal.strip(), body.max_actions, body.timeout_s,
-                              {"client_id": c["client_id"], "via": "app"})
+            tid = orch.submit(dev, body.goal.strip(), body.max_actions, body.timeout_s, ctx)
         except ValueError as e:
             raise HTTPException(404, str(e))
         return {"task_id": tid, "device_id": dev}
@@ -339,6 +451,71 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
             raise HTTPException(409, "nothing is waiting for that answer on this task")
         return {"answered": True}
 
+    # ---------------------------------------------------------------- the computer's own shortcut (Alt+F8 and say a command)
+    # The helper on a laptop may start a task for ITSELF and follow it. It proves who it is with its device token; it can only
+    # ever touch tasks of its own device, and every task counts against its workspace's daily limit like any other.
+    submits: dict[str, deque] = defaultdict(deque)
+
+    def device_auth(request: Request) -> dict:
+        dev = request.headers.get("x-device-id", "")
+        tok = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        if not dev or not tok or not store.authenticate_device(dev, tok):
+            raise HTTPException(401, "invalid device token")
+        d = store.get_device(dev) or {}
+        return {"device_id": dev, "workspace": d.get("workspace", "main")}
+
+    def device_task(tid: str, d: dict) -> dict:
+        t = store.get_task(tid)
+        if not t or t["device_id"] != d["device_id"]:
+            raise HTTPException(404, "unknown task")
+        return t
+
+    @app.post("/agent/tasks", status_code=202)
+    async def agent_submit(body: AgentTaskIn, d: dict = Depends(device_auth)):
+        now = time.time()
+        q = submits[d["device_id"]]
+        while q and now - q[0] > 60:
+            q.popleft()
+        if len(q) >= 12:
+            raise HTTPException(429, "too many commands in a minute: wait a moment")
+        w = store.get_workspace(d["workspace"]) or {}
+        if w.get("disabled"):
+            raise HTTPException(403, "this workspace is switched off")
+        if store.count_tasks_since(d["workspace"], now - 86400) >= int(w.get("max_tasks_per_day", 100)):
+            raise HTTPException(429, "this workspace reached its daily task limit; try again tomorrow")
+        if (nid := note_if_preference(d["workspace"], d["device_id"], body.goal, {"via": "shortcut", "device": d["device_id"]})):
+            q.append(now)
+            return {"task_id": nid}                                          # a saved preference: nothing was run
+        try:
+            tid = orch.submit(d["device_id"], body.goal.strip(), 30, 420, {"via": "shortcut", "device": d["device_id"]})
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        q.append(now)
+        return {"task_id": tid}
+
+    @app.get("/agent/tasks/{tid}")
+    def agent_task(tid: str, d: dict = Depends(device_auth)):
+        return task_view(store, orch, device_task(tid, d), steps=False)
+
+    @app.post("/agent/tasks/{tid}/cancel")
+    async def agent_cancel(tid: str, d: dict = Depends(device_auth)):
+        device_task(tid, d)
+        return {"cancelled": await orch.cancel(tid)}
+
+    @app.post("/agent/tasks/{tid}/approve")
+    def agent_approve(tid: str, body: ApproveIn, d: dict = Depends(device_auth)):
+        device_task(tid, d)
+        if not orch.approve(tid, body.approved):
+            raise HTTPException(409, "nothing is waiting for approval on this task")
+        return {"approved": body.approved}
+
+    @app.post("/agent/tasks/{tid}/answer")
+    def agent_answer(tid: str, body: AnswerIn, d: dict = Depends(device_auth)):
+        device_task(tid, d)
+        if not orch.answer(tid, body.choice, body.text):
+            raise HTTPException(409, "nothing is waiting for that answer on this task")
+        return {"answered": True}
+
     # ---------------------------------------------------------------- what Deskhand has learned (per workspace)
     @app.get("/v1/skills")
     def skills_list(c: dict = Depends(client)):
@@ -362,6 +539,40 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
             raise HTTPException(404, "unknown skill")
         return {"forgotten": sid}
 
+    @app.get("/v1/preferences")
+    def preferences(c: dict = Depends(client)):
+        return store.list_preferences(c["workspace"])
+
+    @app.delete("/v1/preferences/{pid}")
+    def preference_forget(pid: str, c: dict = Depends(client)):
+        if not store.delete_preference(c["workspace"], pid):
+            raise HTTPException(404, "unknown preference")
+        return {"forgotten": pid}
+
+    def drop_chat(ws: str, ids: list[str]) -> int:
+        n = store.delete_tasks(ids)
+        orch.forget(ids)
+        return n
+
+    def running_in(ids: list[str]) -> bool:
+        return any((store.get_task(i) or {}).get("status") not in TERMINAL_VALUES for i in ids if store.get_task(i))
+
+    @app.delete("/v1/chats/{tid}")
+    def delete_chat(tid: str, c: dict = Depends(client)):
+        """Delete a whole chat: every task in the thread that contains `tid`, with its steps. Only your own."""
+        ids = chats.thread_ids(store, c["workspace"], tid)
+        if not ids:
+            raise HTTPException(404, "unknown chat")                       # same answer for 'not yours' and 'not there'
+        if running_in(ids):
+            raise HTTPException(409, "This chat is still running. Press Stop first, then delete it.")
+        return {"deleted": drop_chat(c["workspace"], ids), "ids": ids}
+
+    @app.delete("/v1/chats")
+    def delete_finished_chats(c: dict = Depends(client)):
+        """Delete every chat that has nothing running. Chats with a running task are left alone."""
+        ids = [i for g in chats.finished_chats(store, c["workspace"]) for i in g]
+        return {"deleted": drop_chat(c["workspace"], ids), "chats": len(ids)}
+
     @app.post("/v1/estop")
     async def estop(c: dict = Depends(client)):
         await orch.emergency_stop(workspace=c["workspace"])          # only YOUR tasks and laptops
@@ -379,7 +590,7 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
             beat = time.monotonic()
             while True:
                 dv = devices_view(ws)
-                key = [(d["device_id"], d["online"]) for d in dv]
+                key = [(d["device_id"], d["online"], d["extension"]) for d in dv]
                 if key != last_devices:
                     last_devices = key
                     yield f"event: devices\ndata: {json.dumps(dv)}\n\n"
@@ -407,7 +618,8 @@ def install_client_api(app: FastAPI, store, hub, orch, admin_auth: Callable) -> 
         if path.startswith("/app"):
             for k, v in APP_HEADERS.items():
                 resp.headers.setdefault(k, v)
-            resp.headers["Cache-Control"] = "no-cache"          # always re-check (ETag): an update must show up at once
+            resp.headers.setdefault("Cache-Control", "no-cache")   # always re-check (ETag): an update must show up at once
+            #                                                        (setdefault: the new app's hashed files say "immutable" themselves)
         elif path.startswith(("/v1", "/pairing", "/clients", "/agent", "/i/", "/invites", "/workspaces")):
             resp.headers["Cache-Control"] = "no-store"
         return resp

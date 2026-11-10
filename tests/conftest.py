@@ -128,8 +128,27 @@ class FakeBackend(Backend):
         self.urls: dict[str, str] = {}              # window title -> the full address shown (when a test needs the path)
         self.apps = {"spotify": r"shell:AppsFolder\SpotifyAB.SpotifyMusic!Spotify"}      # what resolve_app can find
         self.active_process = ""                    # process of the foreground window (real Windows always has one)
+        self.ctx_calls: list[tuple] = []
+        self.idle = 99.0                            # seconds since the PERSON last used the mouse/keyboard (tests lower it)
+        self.context = {"hwnd": 7, "cursor": (10, 10)}
+        self.can_capture_behind = False             # can a window be captured while others cover it?
 
     def display_size(self): return (2560, 1440)
+
+    def user_idle_s(self): return self.idle
+
+    def capture_user_context(self):
+        self.ctx_calls.append(("capture_ctx",))               # kept apart from `calls`: many tests assert the exact list of those
+        return dict(self.context)
+
+    def restore_user_context(self, ctx): self.ctx_calls.append(("restore_ctx", ctx["hwnd"]))
+
+    def screenshot_window_titled(self, title, max_dimension):
+        if not self.can_capture_behind:
+            raise NotImplementedError
+        self.calls.append(("shot_titled", title))
+        return Screenshot(image_b64="BEHIND", width=640, height=360, display_width=2560, display_height=1440,
+                          scale=2.0, origin_x=100, origin_y=50, captured_at=0, active_window=WindowInfo(title=title))
 
     def screenshot(self, max_dimension):
         return Screenshot(image_b64="AAAA", width=1280, height=720, display_width=2560,

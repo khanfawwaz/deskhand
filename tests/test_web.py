@@ -67,7 +67,7 @@ def test_long_text_cannot_stretch_the_page_wider_than_the_screen():
     """A long task title once made the whole app wider than the window (sideways scrolling, content pushed off the right)."""
     css = (WEB / "style.css").read_text(encoding="utf-8")
     assert "grid-template-columns: minmax(0, 1fr)" in css                     # a grid column may not grow to fit its widest line
-    assert ".history .g { min-width: 0;" in css and ".history button { min-width: 0; }" in css
+    assert ".history .g { min-width: 0;" in css and ".history button { min-width: 0;" in css
     assert "overflow-wrap: anywhere" in css
 
 
@@ -84,3 +84,15 @@ def test_app_files_are_always_revalidated_so_updates_show_up_at_once(tmp_path):
     with TestClient(app) as c:
         for f in ("style.css", "app.js", "logic.js", "index.html", "sw.js"):
             assert c.get(f"/app/{f}").headers["cache-control"] == "no-cache", f      # a stale stylesheet once survived an update
+        r = c.get("/app/privacy.html")                       # the Chrome Web Store needs a public privacy policy
+        assert r.status_code == 200 and "privacy policy" in r.text.lower() and "127.0.0.1" not in r.text     # plain words only: no raw IP address on the page
+        assert "no cookies" in r.text and "Last updated" in r.text and "github.com/khanfawwaz/deskhand/issues" in r.text
+        assert "Delete my account and data" in r.text and "90 days" in r.text         # the policy names the self-service tools it promises
+        t = c.get("/app/terms.html")
+        assert t.status_code == 200 and "Terms of use" in t.text and "Last updated" in t.text and "free of charge" in t.text
+        assert c.get("/app/legal.css").status_code == 200
+        sw = c.get("/app/sw.js").text
+        assert "privacy.html" in sw and "terms.html" in sw and "legal.css" in sw       # the offline shell must not 404 on install
+        index = c.get("/app/index.html").text
+        assert 'href="privacy.html"' in index and 'href="terms.html"' in index        # reachable from the sign-in screen and Settings
+        assert 'id="exportBtn"' in index and 'id="deleteBtn"' in index and 'id="deleteDlg"' in index

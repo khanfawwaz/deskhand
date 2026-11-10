@@ -50,6 +50,15 @@ CREATE TABLE IF NOT EXISTS workspaces(
 CREATE TABLE IF NOT EXISTS skills(
   workspace TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, updated_at REAL NOT NULL,
   PRIMARY KEY(workspace, key));
+CREATE TABLE IF NOT EXISTS preferences(
+  id TEXT PRIMARY KEY, workspace TEXT NOT NULL DEFAULT 'main', text TEXT NOT NULL, created_at REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS preferences_ws ON preferences(workspace);
+CREATE TABLE IF NOT EXISTS usage(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, workspace TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', prompt INTEGER NOT NULL DEFAULT 0, completion INTEGER NOT NULL DEFAULT 0,
+  latency_ms REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'ok', cost REAL NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
+CREATE INDEX IF NOT EXISTS usage_ws_ts ON usage(workspace, ts);
 CREATE TABLE IF NOT EXISTS metrics(
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, name TEXT NOT NULL,
   value_ms REAL NOT NULL, at REAL NOT NULL);
@@ -92,8 +101,12 @@ def _device(d: dict) -> dict:
 
 class SqliteStore:
     def __init__(self, path: str = ":memory:", debug_logging: bool = False):
-        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db = sqlite3.connect(path, check_same_thread=False, timeout=15)
         self._db.row_factory = sqlite3.Row
+        if path != ":memory:":
+            self._db.execute("PRAGMA journal_mode=WAL")           # readers do not wait for writers; survives a crash cleanly
+            self._db.execute("PRAGMA synchronous=NORMAL")
+            self._db.execute("PRAGMA busy_timeout=15000")
         self._lock = threading.RLock()
         self.debug_logging = debug_logging
         self._last_created = 0.0
@@ -191,6 +204,24 @@ class SqliteStore:
         return self._q("SELECT COUNT(*) AS n FROM tasks WHERE workspace=? AND created_at>=?",
                        workspace, since)[0]["n"]
 
+    # ---------------------------------------------------------------- usage (every model call)
+    def add_usage(self, rec: dict) -> None:
+        self._q("INSERT INTO usage(ts,workspace,task_id,model,kind,prompt,completion,latency_ms,status,cost) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                rec["ts"], rec.get("workspace", ""), rec.get("task_id", ""), rec.get("model", ""), rec.get("kind", ""),
+                int(rec.get("prompt", 0)), int(rec.get("completion", 0)), float(rec.get("latency_ms", 0)),
+                rec.get("status", "ok"), float(rec.get("cost", 0)))
+
+    def usage_since(self, since: float, workspace: str | None = None) -> dict:
+        """Totals since a time, and a per-workspace breakdown (busiest first)."""
+        where, args = ("ts>=?", [since]) if workspace is None else ("ts>=? AND workspace=?", [since, workspace])
+        t = self._q(f"SELECT COUNT(*) AS calls, COALESCE(SUM(prompt),0) AS prompt, COALESCE(SUM(completion),0) AS completion, "
+                    f"COALESCE(SUM(cost),0) AS cost, COALESCE(SUM(status!='ok'),0) AS errors FROM usage WHERE {where}", *args)[0]
+        by = self._q(f"SELECT workspace, COUNT(*) AS calls, SUM(prompt) AS prompt, SUM(completion) AS completion, SUM(cost) AS cost "
+                     f"FROM usage WHERE {where} GROUP BY workspace ORDER BY SUM(prompt)+SUM(completion) DESC LIMIT 200", *args)
+        return {"calls": t["calls"], "prompt": t["prompt"], "completion": t["completion"], "cost": t["cost"], "errors": t["errors"],
+                "by_workspace": [{"workspace": r["workspace"], "calls": r["calls"], "prompt": r["prompt"] or 0,
+                                  "completion": r["completion"] or 0, "cost": r["cost"] or 0} for r in by]}
+
     def active_task_ids(self, workspace: str) -> list[str]:
         """Tasks of one workspace that have not finished (used to scope an emergency stop)."""
         done = [t.value for t in TERMINAL]
@@ -283,6 +314,34 @@ class SqliteStore:
     def delete_skill(self, workspace: str, key: str) -> bool:
         with self._lock:
             cur = self._db.execute("DELETE FROM skills WHERE workspace=? AND key=?", (workspace, key))
+            self._db.commit()
+            return cur.rowcount > 0
+
+    # -------------------------------------------------------------- preferences (things the person asked to be remembered)
+    def add_preference(self, workspace: str, text: str) -> str:
+        """Save one preference (the same sentence twice is kept once). The oldest go when there are too many."""
+        from .prefs import MAX_PER_WORKSPACE
+        text = text.strip()
+        with self._lock:
+            for r in self._db.execute("SELECT id,text FROM preferences WHERE workspace=?", (workspace,)):
+                if r["text"].strip().lower() == text.lower():
+                    return r["id"]
+            pid = "p_" + uuid.uuid4().hex[:10]
+            self._db.execute("INSERT INTO preferences(id,workspace,text,created_at) VALUES(?,?,?,?)",
+                             (pid, workspace, text, self._created_at()))
+            for r in self._db.execute("SELECT id FROM preferences WHERE workspace=? ORDER BY created_at DESC LIMIT -1 OFFSET ?",
+                                      (workspace, MAX_PER_WORKSPACE)).fetchall():
+                self._db.execute("DELETE FROM preferences WHERE id=?", (r["id"],))
+            self._db.commit()
+            return pid
+
+    def list_preferences(self, workspace: str, limit: int = 100) -> list[dict]:
+        return [dict(r) for r in self._q("SELECT id,text,created_at FROM preferences WHERE workspace=? "
+                                         "ORDER BY created_at DESC LIMIT ?", workspace, limit)]
+
+    def delete_preference(self, workspace: str, pid: str) -> bool:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM preferences WHERE id=? AND workspace=?", (pid, workspace))
             self._db.commit()
             return cur.rowcount > 0
 
@@ -396,6 +455,73 @@ class SqliteStore:
             cur = self._db.execute("DELETE FROM recipes WHERE name=?", (name,))
             self._db.commit()
             return cur.rowcount > 0
+
+    # -------------------------------------------------------------- the person's own data: export, delete, retention
+    def export_workspace(self, wid: str) -> dict:
+        from .datarights import build_export
+        usage = [dict(r) for r in self._q("SELECT ts,task_id,model,kind,prompt,completion,latency_ms,status,cost "
+                                          "FROM usage WHERE workspace=? ORDER BY ts", wid)]
+        return build_export(self, wid, usage)
+
+    def _delete_task_rows(self, ids: list[str]) -> dict:
+        """Children first. Done in slices so a big history never trips SQLite's variable limit."""
+        n = {"actions": 0, "transitions": 0, "metrics": 0}
+        for i in range(0, len(ids), 400):
+            chunk = ids[i:i + 400]
+            marks = ",".join("?" * len(chunk))
+            for table in n:
+                n[table] += self._db.execute(f"DELETE FROM {table} WHERE task_id IN ({marks})", chunk).rowcount
+        return n
+
+    def delete_tasks(self, ids: list[str]) -> int:
+        """Delete these tasks with their steps, state history and measurements (a chat the person deleted).
+        Returns how many tasks were removed. Other tasks that pointed at them just start their own chat."""
+        ids = list(dict.fromkeys(ids))
+        if not ids:
+            return 0
+        with self._lock:
+            self._delete_task_rows(ids)
+            n = 0
+            for i in range(0, len(ids), 400):
+                chunk = ids[i:i + 400]
+                n += self._db.execute(f"DELETE FROM tasks WHERE id IN ({','.join('?' * len(chunk))})", chunk).rowcount
+            self._db.commit()
+            return n
+
+    def delete_workspace_data(self, wid: str) -> dict:
+        """Erase everything belonging to a workspace, including its row (the default 'main' workspace keeps its row)."""
+        with self._lock:
+            ids = [r["id"] for r in self._db.execute("SELECT id FROM tasks WHERE workspace=?", (wid,))]
+            counts = self._delete_task_rows(ids)
+            for table in ("tasks", "devices", "clients", "experiences", "skills", "preferences", "usage"):
+                counts[table] = self._db.execute(f"DELETE FROM {table} WHERE workspace=?", (wid,)).rowcount
+            counts["workspace"] = 0 if wid == DEFAULT_WS else self._db.execute(
+                "DELETE FROM workspaces WHERE id=?", (wid,)).rowcount
+            self._db.commit()
+            return counts
+
+    def purge_older_than(self, task_cutoff: float, usage_cutoff: float) -> dict:
+        """Retention. Finished tasks (with their steps and measurements) and learned experiences older than
+        `task_cutoff`, usage counts older than `usage_cutoff`. A cutoff of 0 skips that part. Skills are kept."""
+        done = [t.value for t in TERMINAL]
+        with self._lock:
+            counts = {"tasks": 0, "actions": 0, "transitions": 0, "metrics": 0, "experiences": 0, "usage": 0}
+            if task_cutoff:
+                ids = [r["id"] for r in self._db.execute(
+                    f"SELECT id FROM tasks WHERE updated_at<? AND status IN ({','.join('?' * len(done))})",
+                    (task_cutoff, *done))]
+                counts.update(self._delete_task_rows(ids))
+                for i in range(0, len(ids), 400):
+                    chunk = ids[i:i + 400]
+                    counts["tasks"] += self._db.execute(
+                        f"DELETE FROM tasks WHERE id IN ({','.join('?' * len(chunk))})", chunk).rowcount
+                counts["metrics"] += self._db.execute("DELETE FROM metrics WHERE at<?", (task_cutoff,)).rowcount
+                counts["experiences"] = self._db.execute("DELETE FROM experiences WHERE created_at<?",
+                                                         (task_cutoff,)).rowcount
+            if usage_cutoff:
+                counts["usage"] = self._db.execute("DELETE FROM usage WHERE ts<?", (usage_cutoff,)).rowcount
+            self._db.commit()
+            return counts
 
     def add_metric(self, task_id: str | None, name: str, value_ms: float) -> None:
         self._q("INSERT INTO metrics(task_id,name,value_ms,at) VALUES(?,?,?,?)",

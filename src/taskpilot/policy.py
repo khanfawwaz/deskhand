@@ -136,6 +136,11 @@ class Policy:
     # irreversible, so they never rest on the model's judgement alone).
     ui_confirm_names: list[str] = field(default_factory=lambda: list(DEFAULT_UI_CONFIRM_NAMES))
     allow_admin: bool = False  # always False in v1; kept explicit for audit
+    # Sharing the computer with its owner: wait for a pause before taking the mouse/keyboard/front window, and put the
+    # owner's window back afterwards.
+    polite: bool = True
+    polite_idle_s: float = 2.5               # how long the owner must have been still
+    polite_max_wait_s: float = 45.0          # give up (and say so) after waiting this long
 
     @classmethod
     def from_dict(cls, d: dict) -> "Policy":
@@ -160,6 +165,9 @@ class Policy:
             require_site_approval=bool(d.get("require_site_approval", False)),
             deny_hosts=[h.lower() for h in d.get("deny_hosts", DEFAULT_DENY_HOSTS)],
             ui_confirm_names=list(d.get("ui_confirm_names", DEFAULT_UI_CONFIRM_NAMES)),
+            polite=bool(d.get("polite", True)),
+            polite_idle_s=float(d.get("polite_idle_s", 2.5)),
+            polite_max_wait_s=float(d.get("polite_max_wait_s", 45.0)),
         )
 
     def ui_window_allowed(self, title: str, process: str, host: str | None = None) -> "Decision":

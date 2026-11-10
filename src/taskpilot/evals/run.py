@@ -43,6 +43,7 @@ async def amain(argv: list[str] | None = None) -> int:
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--out", default="evals_out")
     ap.add_argument("--include-heavy", action="store_true")
+    ap.add_argument("--tag", default="", help="only tasks carrying this tag (e.g. simple)")
     ap.add_argument("--no-learn", action="store_true", help="do not use or store experience memory")
     ap.add_argument("--text-model", default="", help="two-model mode: the large text model that decides (TP_MODEL = the vision model)")
     ap.add_argument("--split-mode", default="describe", choices=["describe", "route"])
@@ -54,6 +55,8 @@ async def amain(argv: list[str] | None = None) -> int:
     wanted = [t for t in a.tasks.split(",") if t]
     specs = [s for s in get_suite(a.suite)
              if (any(w in s.id for w in wanted) if wanted else (a.include_heavy or "heavy" not in s.tags))]
+    if a.tag:
+        specs = [s for s in get_suite(a.suite) if a.tag in s.tags]
     if not specs:
         print("no tasks selected")
         return 2
